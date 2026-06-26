@@ -1,49 +1,22 @@
 # Project Layout
 
-KRATOS follows the standard shape of a Kubebuilder project, with additional
-domain packages for profiling, scheduling, telemetry, workflow generation, and
-Volcano integration.
+KRATOS follows a normal Kubebuilder layout plus small domain packages used by
+the reconciler.
 
-## Root Files
+## Main Directories
 
-- `README.md`: project overview, research goal, and high-level structure.
-- `PROJECT`: Kubebuilder project metadata.
-- `go.mod`: Go module definition.
-- `Makefile`: common development and generation commands.
-- `LICENSE`: project license.
-
-## Controller Modules
-
+- `api/v1alpha1`: `AIExperiment` API types.
 - `cmd/manager`: controller manager entrypoint.
-- `api/v1alpha1`: `AIExperiment` API types and future CRD schema markers.
-- `internal/controller`: reconcilers and controller-runtime wiring.
-- `config/crd`: generated CustomResourceDefinition manifests.
-- `config/rbac`: generated controller permissions.
-- `config/manager`: controller manager deployment manifests.
-- `config/default`: default kustomize installation entrypoint.
-- `config/prometheus`: metrics and ServiceMonitor configuration.
-- `config/samples`: sample custom resources for manual testing.
-
-## KRATOS Domain Modules
-
-- `pkg/catalog`: persistent workload profile lookup and storage.
-- `pkg/profiling`: Nsight-based CUDA profiling and workload classification.
-- `pkg/scheduling`: GPU-aware scheduling decisions.
-- `pkg/telemetry`: Prometheus metrics for architectural workload data.
-- `pkg/volcano`: Volcano Job and queue builders.
+- `internal/controller`: reconciliation logic.
+- `config`: CRDs, RBAC, manager deployment, samples, and kustomize entrypoints.
+- `pkg/catalog`: workload profile records.
+- `pkg/profiling`: CUDA profiling and workload classification.
+- `pkg/scheduling`: queue, GPU, MIG, and co-location decisions.
+- `pkg/telemetry`: Prometheus metric helpers.
+- `pkg/volcano`: Volcano object builders.
 - `pkg/workflow`: Argo Workflow builders.
+- `docs`: project notes.
+- `test/e2e`: cluster-level tests.
 
-## Test and Support Directories
-
-- `test/e2e`: end-to-end tests against a Kubernetes cluster.
-- `hack`: boilerplate and helper scripts for generation.
-- `docs`: project documentation.
-
-## Placement Rules
-
-- Put Kubernetes API types in `api/<version>`.
-- Put reconciler code in `internal/controller`.
-- Put reusable domain logic in `pkg`.
-- Keep generated manifests under `config`.
-- Keep experiment instructions, architecture notes, and contributor workflows in
-  `docs`.
+Keep Kubernetes-facing code in `api`, `internal/controller`, and `config`.
+Keep reusable profiling, scheduling, workflow, and telemetry logic in `pkg`.

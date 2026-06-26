@@ -1,59 +1,27 @@
-# Experiment Guide
+# Experiments
 
-KRATOS exists to evaluate whether CUDA architectural profiling can improve
-cloud-native scheduling decisions for GPU workloads.
+KRATOS should evaluate whether CUDA profiling improves GPU scheduling compared
+with standard Kubernetes and Volcano policies.
 
 ## Workloads
 
-Initial validation workloads should include:
+Start with common vision workloads such as CIFAR-10, CIFAR-100, Tiny ImageNet,
+ResNet50, EfficientNet-B0, Vision Transformer, and ConvNeXt Tiny.
 
-- CIFAR-10
-- CIFAR-100
-- Tiny ImageNet
-- ResNet50
-- EfficientNet-B0
-- Vision Transformer
-- ConvNeXt Tiny
+## Baselines
 
-## Scheduling Scenarios
-
-Compare KRATOS against progressively richer baselines:
+Compare against:
 
 1. Kubernetes default scheduler
 2. Volcano FIFO
 3. Volcano Fair Share
 4. Volcano with MIG
-5. Volcano with MIG and KRATOS GPU-aware policies
+5. Volcano with MIG and KRATOS policies
 
-## Infrastructure Metrics
+## Metrics
 
-Track these metrics for each scenario:
+Track throughput, makespan, waiting time, completion time, GPU utilization,
+fairness, SM occupancy, warp efficiency, memory throughput, cache hit rate,
+achieved FLOPS, GPU active time, and GPU idle time.
 
-- throughput
-- makespan
-- average waiting time
-- average completion time
-- GPU utilization
-- fairness
-
-## Architectural Metrics
-
-Profiling and telemetry should capture:
-
-- SM occupancy
-- warp execution efficiency
-- achieved FLOPS
-- memory throughput
-- memory bandwidth utilization
-- L1 cache hit rate
-- L2 cache hit rate
-- GPU active time
-- GPU idle time
-
-## Results Organization
-
-Keep experiment configuration, raw metrics, and analysis scripts separate:
-
-- configuration: scheduler, queue, MIG, workload mix, and cluster setup
-- raw metrics: Prometheus exports, MLflow runs, and profiling outputs
-- analysis: notebooks or scripts that compute aggregate metrics and plots
+Keep configuration, raw metrics, and analysis scripts separate.
