@@ -1,6 +1,5 @@
 // Package profiling integrates CUDA workload characterization.
 //
-// This module will execute reduced training runs with NVIDIA Nsight Compute
-// and NVIDIA Nsight Systems, collect microarchitectural metrics, and normalize
-// them into catalog profiles.
+// This module will collect metrics with NVIDIA Nsight Compute, NVIDIA DCGM, or
+// other CUDA sources after execution and normalize them into catalog profiles.
 package profiling

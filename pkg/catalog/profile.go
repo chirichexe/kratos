@@ -1,22 +1,17 @@
 package catalog
 
-// WorkloadKey uniquely identifies a profiled training workload.
+// WorkloadKey uniquely identifies a profiled CUDA workload.
 type WorkloadKey struct {
-	Model     string
-	Dataset   string
-	BatchSize int32
-	Precision string
+	WorkloadHash string
 }
 
-// Profile contains the architectural metrics used by KRATOS policies.
+// Profile contains the historical metrics used by KRATOS scheduling policies.
 type Profile struct {
-	WorkloadClass      string
-	SMOccupancy        float64
-	WarpEfficiency     float64
-	AchievedFLOPS      float64
-	MemoryThroughput   float64
-	MemoryBandwidth    float64
-	L1CacheHitRate     float64
-	L2CacheHitRate     float64
-	GPUActiveTimeRatio float64
+	Classification          string
+	ComputeUtilization      float64
+	MemoryUtilization       float64
+	TensorUtilization       float64
+	AverageExecutionTime    float64
+	AveragePowerConsumption float64
+	LastUpdate              string
 }

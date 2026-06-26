@@ -1,5 +1,5 @@
-// Package workflow builds Argo Workflow resources for CudaExperiment execution.
+// Package workflow contains workload construction helpers for CUDAExperiment execution.
 //
-// The generated workflow should include optional profiling stages, training,
-// evaluation, MLflow logging, and metadata labels used by monitoring.
+// The generated resources should include optional profiling metadata and the
+// node-selection hints produced by the scheduling layer.
 package workflow

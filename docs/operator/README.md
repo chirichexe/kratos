@@ -1,22 +1,20 @@
 # Operator
 
-`CudaExperiment` is the user-facing resource. Users describe the model,
-dataset, batch size, epochs, priority, and precision; the controller decides
-how to run it.
+`CUDAExperiment` is the user-facing resource. Users describe the container,
+GPU requirements, profiling preference, and optional distributed constraints.
 
 Expected lifecycle:
 
-1. Read the `CudaExperiment` spec.
-2. Look up an existing workload profile.
-3. Run a reduced profiling job when no profile exists.
-4. Classify the workload.
-5. Select a Volcano queue and GPU or MIG shape.
-6. Create or update Argo and Volcano resources.
-7. Update status and expose telemetry.
+1. Read the `CUDAExperiment` spec.
+2. Compute or read the workload hash.
+3. Look up a matching profile in the knowledge base.
+4. Collect static GPU data and runtime node metrics.
+5. Filter nodes that do not satisfy hard constraints.
+6. Score the remaining nodes.
+7. Generate `NodeAffinity` and `NodeSelector` hints.
+8. Submit the workload to Volcano for final scheduling.
+9. Profile completed workloads and update the profile.
 
-The reconciler should coordinate this flow, while reusable decisions stay in
-`pkg/catalog`, `pkg/profiling`, `pkg/scheduling`, `pkg/workflow`,
-`pkg/volcano`, and `pkg/telemetry`.
-
-Generated resources should be owned by the `CudaExperiment` so Kubernetes garbage
-collection can clean them up.
+The reconciler should coordinate this flow while reusable decisions stay in
+`pkg/catalog`, `pkg/profiling`, `pkg/scheduling`, `pkg/volcano`,
+`pkg/workflow`, and `pkg/telemetry`.

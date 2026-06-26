@@ -9,7 +9,7 @@ README. The project is still small, so each page should stay short and focused.
 - [Project Structure](development/project-layout.md): package responsibilities.
 - [Architecture](architecture/README.md): intended control flow and system
   layers.
-- [Operator](operator/README.md): expected `CudaExperiment` lifecycle.
+- [Operator](operator/README.md): expected `CUDAExperiment` lifecycle.
 - [Experiments](experiments/README.md): evaluation scenarios and metrics.
 - [Workflow](development/workflow.md): common development commands.
 

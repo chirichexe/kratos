@@ -2,62 +2,63 @@
 
 # KRATOS
 
-**Kubernetes Resource-aware Autonomous Training and Orchestration System**
+**Framework for Application-Aware GPU Scheduling in Kubernetes**
 
 [![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)](https://go.dev/)
-[![MLflow](https://img.shields.io/badge/MLflow-0194E2.svg?style=for-the-badge&logo=MLflow&logoColor=white)](https://mlflow.org/)
 [![NVIDIA](https://img.shields.io/badge/NVIDIA-76B900.svg?style=for-the-badge&logo=nVIDIA&logoColor=white)](https://www.nvidia.com/)
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=for-the-badge)](https://opensource.org/licenses/Apache-2.0)
 
 </div>
 
-KRATOS is an academic Kubernetes operator project for studying how CUDA deep
-learning workloads can be scheduled more efficiently on GPU clusters.
+KRATOS is an academic Kubernetes operator project for studying application-aware
+GPU scheduling of CUDA workloads on heterogeneous clusters.
 
-The main idea is to connect CUDA profiling data with cloud-native scheduling.
-Instead of relying only on declared CPU, memory, and GPU requests, KRATOS plans
-to classify workloads as `compute-bound`, `memory-bound`, or `balanced`, then
-use that information for Volcano queue selection, GPU or MIG placement, and
-experiment tracking.
+The framework does not replace Kubernetes or Volcano. It adds an intermediate
+decision layer that learns from previous executions, scores eligible nodes, and
+generates scheduling hints that Volcano can use for final placement.
 
 ## Status
 
 The repository is currently a lightweight Kubebuilder-style scaffold. It
-defines the `CudaExperiment` API direction, controller boundary, and domain
-packages for profiling, scheduling, telemetry, Argo workflow generation,
-Volcano integration, and profile catalog storage.
+defines the `CUDAExperiment` API direction, controller boundary, and domain
+packages for workload profiling, profile storage, scheduling decisions,
+telemetry, Volcano integration, and workload construction.
 
 Planned integrations include:
 
-- Kubernetes and Volcano for batch orchestration.
-- NVIDIA MIG, DCGM Exporter, Nsight Compute, and Nsight Systems for GPU
-  partitioning, monitoring, and profiling.
-- Argo Workflows and MLflow for training pipelines and experiment metadata.
-- Prometheus and Grafana for infrastructure metrics.
+- Kubernetes for resource lifecycle management.
+- Volcano for queueing, gang scheduling, priorities, preemption, fair sharing,
+  and final placement.
+- NVIDIA Nsight Compute and DCGM for CUDA profiling and GPU metrics.
+- Prometheus and Grafana for runtime observability.
 
-## CudaExperiment
+## CUDAExperiment
 
-Users describe a training run with one Kubernetes custom resource:
+Users describe a CUDA workload with one Kubernetes custom resource:
 
 ```yaml
-apiVersion: kratos.io/v1alpha1
-kind: CudaExperiment
+apiVersion: gpu.scheduler.io/v1alpha1
+kind: CUDAExperiment
 metadata:
-  name: resnet50-cifar100
+  name: cuda-vector-add
 spec:
-  model: resnet50
-  dataset: cifar100
-  batchSize: 128
-  epochs: 50
-  priority: medium
-  precision: fp32
+  image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
+  command: ["./vectorAdd"]
+  replicas: 1
+  gpuRequired: 1
+  minimumComputeCapability: "7.0"
+  minimumMemory: 4Gi
+  priority: normal
+  profilingEnabled: true
+  distributed: false
+  numberOfGPUs: 1
+  numberOfNodes: 1
 ```
 
-The operator is responsible for translating that intent into profiling jobs,
-Argo Workflows, Volcano Jobs, MLflow metadata, GPU or MIG choices, and status
-updates.
+The operator is responsible for profile lookup, cluster scoring, node-selection
+hints, Volcano submission, and profile updates after execution.
 
 ## Development
 

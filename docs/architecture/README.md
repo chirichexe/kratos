@@ -1,26 +1,27 @@
 # Architecture
 
-KRATOS is planned around five layers:
+KRATOS is planned around five components:
 
-1. Users submit `CudaExperiment` resources.
-2. The operator creates profiling, workflow, scheduling, metadata, and metrics
-   resources.
-3. Volcano schedules workloads onto GPU or MIG capacity.
-4. Nsight tooling profiles unknown CUDA workloads.
-5. Prometheus, Grafana, and DCGM Exporter expose metrics.
+1. Kubernetes manages resource lifecycle.
+2. Volcano remains the final scheduler.
+3. The CUDA Scheduling Operator evaluates workload history and cluster state.
+4. The knowledge base stores workload profiles.
+5. The profiler collects CUDA metrics after execution.
 
 ```mermaid
 flowchart TB
-    user[User] --> cr[CudaExperiment]
-    cr --> operator[KRATOS Operator]
-    operator --> argo[Argo Workflows]
-    operator --> volcano[Volcano Scheduler]
-    operator --> mlflow[MLflow]
-    operator --> metrics[Prometheus]
-    volcano --> gpu[GPU or MIG]
-    metrics --> grafana[Grafana]
+    user[User] --> cr[CUDAExperiment]
+    cr --> operator[CUDA Scheduling Operator]
+    operator --> kb[Knowledge Base]
+    operator --> cluster[Cluster Metrics]
+    operator --> hints[NodeAffinity and NodeSelector]
+    hints --> volcano[Volcano Scheduler]
+    volcano --> kube[Kubernetes]
+    kube --> workload[CUDA Workload]
+    workload --> profiler[Profiler]
+    profiler --> kb
 ```
 
-The research hypothesis is that CUDA microarchitectural data can improve GPU
-allocation, throughput, fairness, and makespan compared with policies based
-only on declared resource requests.
+The operator applies hard constraints first, then scores eligible nodes using
+compute, memory, network, load, energy, and heterogeneity signals. Volcano still
+performs the final scheduling decision.

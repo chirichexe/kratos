@@ -11,11 +11,11 @@ Use this short loop for normal changes:
 
 - API fields and status: `api/v1alpha1`
 - Reconciliation: `internal/controller`
-- Profiling: `pkg/profiling`
 - Profile storage: `pkg/catalog`
-- Scheduling: `pkg/scheduling`
-- Argo resources: `pkg/workflow`
+- Profiling and classification: `pkg/profiling`
+- Scheduling constraints and scoring: `pkg/scheduling`
 - Volcano resources: `pkg/volcano`
+- Workload construction: `pkg/workflow`
 - Metrics: `pkg/telemetry`
 
 ## Commands
@@ -30,6 +30,6 @@ For a manual cluster check after manifests are generated:
 
 ```bash
 kubectl apply -k config/default
-kubectl apply -f config/samples/kratos_v1alpha1_cudaexperiment.yaml
-kubectl get cudaexperiments.kratos.io
+kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiments.gpu.scheduler.io
 ```

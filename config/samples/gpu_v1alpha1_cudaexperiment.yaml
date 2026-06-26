@@ -1,0 +1,17 @@
+apiVersion: gpu.scheduler.io/v1alpha1
+kind: CUDAExperiment
+metadata:
+  name: cuda-vector-add
+spec:
+  image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
+  command: ["./vectorAdd"]
+  arguments: []
+  replicas: 1
+  gpuRequired: 1
+  minimumComputeCapability: "7.0"
+  minimumMemory: 4Gi
+  priority: normal
+  profilingEnabled: true
+  distributed: false
+  numberOfGPUs: 1
+  numberOfNodes: 1

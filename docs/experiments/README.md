@@ -1,12 +1,7 @@
 # Experiments
 
-KRATOS should evaluate whether CUDA profiling improves GPU scheduling compared
-with standard Kubernetes and Volcano policies.
-
-## Workloads
-
-Start with common vision workloads such as CIFAR-10, CIFAR-100, Tiny ImageNet,
-ResNet50, EfficientNet-B0, Vision Transformer, and ConvNeXt Tiny.
+KRATOS should evaluate whether workload history and CUDA metrics improve GPU
+placement compared with resource-only scheduling.
 
 ## Baselines
 
@@ -14,14 +9,24 @@ Compare against:
 
 1. Kubernetes default scheduler
 2. Volcano FIFO
-3. Volcano Fair Share
-4. Volcano with MIG
-5. Volcano with MIG and KRATOS policies
+3. Volcano priority scheduling
+4. Volcano fair sharing
+5. Volcano with KRATOS node-selection hints
+
+## Workload Classes
+
+Initial classes:
+
+- compute-bound
+- memory-bound
+- tensor-core-bound
+
+Future classes may include communication-bound, IO-bound, and mixed workloads.
 
 ## Metrics
 
 Track throughput, makespan, waiting time, completion time, GPU utilization,
-fairness, SM occupancy, warp efficiency, memory throughput, cache hit rate,
-achieved FLOPS, GPU active time, and GPU idle time.
+memory utilization, active workloads, power consumption, temperature, and
+profile reuse rate.
 
-Keep configuration, raw metrics, and analysis scripts separate.
+For distributed scenarios, also track bandwidth, latency, and topology effects.
