@@ -1,0 +1,11 @@
+apiVersion: kratos.io/v1alpha1
+kind: AIExperiment
+metadata:
+  name: resnet50-cifar100
+spec:
+  model: resnet50
+  dataset: cifar100
+  batchSize: 128
+  epochs: 50
+  priority: medium
+  precision: fp32

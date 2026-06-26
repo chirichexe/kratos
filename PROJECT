@@ -1,0 +1,15 @@
+domain: kratos.io
+layout:
+- go.kubebuilder.io/v4
+projectName: kratos
+repo: github.com/chirichexe/kratos
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: kratos.io
+  group: kratos
+  kind: AIExperiment
+  path: github.com/chirichexe/kratos/api/v1alpha1
+  version: v1alpha1
