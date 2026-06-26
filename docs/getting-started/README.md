@@ -38,3 +38,5 @@ kubebuilder create api --group gpu --version v1alpha1 --kind CUDAExperiment --re
 make manifests
 make generate
 ```
+
+For a local multi-node GPU lab, see [kind GPU Lab](kind-gpu.md).
