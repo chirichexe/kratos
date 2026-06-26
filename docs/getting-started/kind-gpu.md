@@ -15,7 +15,17 @@ isolation between replicas.
 
 ## Create a Multi-Node kind Cluster
 
-Create `kind-gpu.yaml`:
+The repository includes a traced setup script:
+
+```bash
+./hack/setup-kind-gpu-lab.sh
+```
+
+The script writes generated files and command logs under `tmp/`. You can tune
+it with environment variables such as `CLUSTER_NAME`, `GPU_REPLICAS`,
+`HELM_VERSION`, and `KIND_CREATE_TIMEOUT`.
+
+The manual equivalent starts by creating `kind-gpu.yaml`:
 
 ```yaml
 kind: Cluster
