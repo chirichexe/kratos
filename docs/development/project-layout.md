@@ -1,11 +1,11 @@
-# Project Layout
+# Project Structure
 
 KRATOS follows a normal Kubebuilder layout plus small domain packages used by
 the reconciler.
 
 ## Main Directories
 
-- `api/v1alpha1`: `AIExperiment` API types.
+- `api/v1alpha1`: `CudaExperiment` API types.
 - `cmd/manager`: controller manager entrypoint.
 - `internal/controller`: reconciliation logic.
 - `config`: CRDs, RBAC, manager deployment, samples, and kustomize entrypoints.

@@ -13,7 +13,7 @@
 
 </div>
 
-KRATOS is an academic Kubernetes operator project for studying how deep
+KRATOS is an academic Kubernetes operator project for studying how CUDA deep
 learning workloads can be scheduled more efficiently on GPU clusters.
 
 The main idea is to connect CUDA profiling data with cloud-native scheduling.
@@ -22,12 +22,12 @@ to classify workloads as `compute-bound`, `memory-bound`, or `balanced`, then
 use that information for Volcano queue selection, GPU or MIG placement, and
 experiment tracking.
 
-## Scope
+## Status
 
-KRATOS is currently a lightweight Kubebuilder-style scaffold. The repository
-defines the API shape, controller boundary, and domain packages for profiling,
-scheduling, telemetry, Argo workflow generation, Volcano integration, and
-profile catalog storage.
+The repository is currently a lightweight Kubebuilder-style scaffold. It
+defines the `CudaExperiment` API direction, controller boundary, and domain
+packages for profiling, scheduling, telemetry, Argo workflow generation,
+Volcano integration, and profile catalog storage.
 
 Planned integrations include:
 
@@ -37,13 +37,13 @@ Planned integrations include:
 - Argo Workflows and MLflow for training pipelines and experiment metadata.
 - Prometheus and Grafana for infrastructure metrics.
 
-## AIExperiment
+## CudaExperiment
 
 Users describe a training run with one Kubernetes custom resource:
 
 ```yaml
 apiVersion: kratos.io/v1alpha1
-kind: AIExperiment
+kind: CudaExperiment
 metadata:
   name: resnet50-cifar100
 spec:
@@ -58,23 +58,6 @@ spec:
 The operator is responsible for translating that intent into profiling jobs,
 Argo Workflows, Volcano Jobs, MLflow metadata, GPU or MIG choices, and status
 updates.
-
-## Repository Layout
-
-```text
-api/v1alpha1/         AIExperiment API types
-cmd/manager/          controller manager entrypoint
-config/               generated and kustomize manifests
-internal/controller/  AIExperiment reconciler
-pkg/catalog/          workload profile records
-pkg/profiling/        CUDA profiling and classification
-pkg/scheduling/       GPU-aware scheduling policies
-pkg/telemetry/        Prometheus metric helpers
-pkg/volcano/          Volcano resource builders
-pkg/workflow/         Argo Workflow builders
-docs/                 short project notes
-test/e2e/             end-to-end test placeholder
-```
 
 ## Development
 
@@ -91,4 +74,10 @@ make manifests
 make generate
 ```
 
-More notes are in [docs/README.md](docs/README.md).
+## Documentation
+
+- [Project structure](docs/development/project-layout.md)
+- [Getting started](docs/getting-started/README.md)
+- [Architecture](docs/architecture/README.md)
+- [Operator lifecycle](docs/operator/README.md)
+- [Experiment notes](docs/experiments/README.md)

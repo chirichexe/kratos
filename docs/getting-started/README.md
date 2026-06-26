@@ -35,7 +35,7 @@ Use this sequence when regenerating the scaffold from a fresh operator setup:
 
 ```bash
 kubebuilder init --domain kratos.io --repo github.com/chirichexe/kratos
-kubebuilder create api --group kratos --version v1alpha1 --kind AIExperiment --resource --controller
+kubebuilder create api --group kratos --version v1alpha1 --kind CudaExperiment --resource --controller
 make manifests
 make generate
 ```

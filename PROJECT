@@ -10,6 +10,6 @@ resources:
   controller: true
   domain: kratos.io
   group: kratos
-  kind: AIExperiment
+  kind: CudaExperiment
   path: github.com/chirichexe/kratos/api/v1alpha1
   version: v1alpha1

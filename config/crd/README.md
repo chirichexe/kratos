@@ -5,4 +5,4 @@ Kubebuilder and controller-gen.
 
 Expected output:
 
-- `bases/kratos.io_aiexperiments.yaml`
+- `bases/kratos.io_cudaexperiments.yaml`

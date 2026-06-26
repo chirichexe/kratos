@@ -30,6 +30,6 @@ For a manual cluster check after manifests are generated:
 
 ```bash
 kubectl apply -k config/default
-kubectl apply -f config/samples/kratos_v1alpha1_aiexperiment.yaml
-kubectl get aiexperiments.kratos.io
+kubectl apply -f config/samples/kratos_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiments.kratos.io
 ```

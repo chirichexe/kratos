@@ -1,10 +1,10 @@
 package v1alpha1
 
-// AIExperimentSpec describes the desired state of an AI experiment.
+// CudaExperimentSpec describes the desired state of a CUDA experiment.
 //
 // Kubebuilder should later wrap this spec in a full Kubernetes custom resource
 // type with TypeMeta, ObjectMeta, Status, deepcopy generation, and CRD markers.
-type AIExperimentSpec struct {
+type CudaExperimentSpec struct {
 	Model     string `json:"model"`
 	Dataset   string `json:"dataset"`
 	BatchSize int32  `json:"batchSize"`
@@ -13,8 +13,8 @@ type AIExperimentSpec struct {
 	Precision string `json:"precision,omitempty"`
 }
 
-// AIExperimentStatus records the observed state of the experiment lifecycle.
-type AIExperimentStatus struct {
+// CudaExperimentStatus records the observed state of the experiment lifecycle.
+type CudaExperimentStatus struct {
 	Phase         string `json:"phase,omitempty"`
 	WorkloadClass string `json:"workloadClass,omitempty"`
 	ProfileName   string `json:"profileName,omitempty"`

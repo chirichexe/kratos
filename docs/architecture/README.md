@@ -2,7 +2,7 @@
 
 KRATOS is planned around five layers:
 
-1. Users submit `AIExperiment` resources.
+1. Users submit `CudaExperiment` resources.
 2. The operator creates profiling, workflow, scheduling, metadata, and metrics
    resources.
 3. Volcano schedules workloads onto GPU or MIG capacity.
@@ -11,7 +11,7 @@ KRATOS is planned around five layers:
 
 ```mermaid
 flowchart TB
-    user[User] --> cr[AIExperiment]
+    user[User] --> cr[CudaExperiment]
     cr --> operator[KRATOS Operator]
     operator --> argo[Argo Workflows]
     operator --> volcano[Volcano Scheduler]

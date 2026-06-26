@@ -1,5 +1,5 @@
 apiVersion: kratos.io/v1alpha1
-kind: AIExperiment
+kind: CudaExperiment
 metadata:
   name: resnet50-cifar100
 spec:
