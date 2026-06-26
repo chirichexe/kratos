@@ -82,3 +82,7 @@ make generate
 - [Architecture](docs/architecture/README.md)
 - [Operator lifecycle](docs/operator/README.md)
 - [Experiment notes](docs/experiments/README.md)
+
+## License
+
+KRATOS is licensed under the [Apache License 2.0](LICENSE).
