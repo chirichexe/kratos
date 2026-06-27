@@ -122,6 +122,7 @@ make generate
 
 ## Documentation
 
+- [Published documentation](https://chirichexe.github.io/kratos/)
 - [Project structure](docs/development/project-layout.md)
 - [Getting started](docs/getting-started/README.md)
 - [Architecture](docs/architecture/README.md)

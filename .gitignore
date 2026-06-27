@@ -1,6 +1,7 @@
 # Local build and tool outputs
 bin/
 dist/
+site/
 cover.out
 Dockerfile.cross
 

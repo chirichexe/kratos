@@ -1,0 +1,25 @@
+site_name: KRATOS
+site_description: Application-aware GPU scheduling notes and documentation.
+site_url: https://chirichexe.github.io/kratos/
+repo_url: https://github.com/chirichexe/kratos
+repo_name: chirichexe/kratos
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quick Start: getting-started/README.md
+      - Local GPU Lab: getting-started/kind-gpu.md
+  - Architecture: architecture/README.md
+  - Operator: operator/README.md
+  - Experiments: experiments/README.md
+  - Development:
+      - Workflow: development/workflow.md
+      - Project Structure: development/project-layout.md
+
+theme:
+  name: mkdocs
+
+markdown_extensions:
+  - fenced_code
+  - toc:
+      permalink: true
