@@ -172,7 +172,9 @@ Deploy the controller with an image that the cluster can pull or already has
 loaded:
 
 ```bash
-make deploy IMG=<registry-or-local-image>
+make docker-build IMG=kratos-controller:v0.1.0
+kind load docker-image kratos-controller:v0.1.0 --name kratos-operator
+make deploy IMG=kratos-controller:v0.1.0
 ```
 
 Check the controller deployment:
