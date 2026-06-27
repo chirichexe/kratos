@@ -5,7 +5,7 @@ nodes:
   - role: control-plane
   - role: worker
     labels:
-      kaags.io/gpu-simulated-node: "true"
+      kratos.io/gpu-simulated-node: "true"
   - role: worker
     labels:
       kratos.io/gpu-simulated-node: "true"

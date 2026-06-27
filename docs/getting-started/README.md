@@ -11,7 +11,7 @@ GPU platform yet.
 - Kubebuilder and controller-gen
 - Access to a Kubernetes cluster for integration work
 
-The full experiment stack will also need NVIDIA GPU Operator, Volcano,
+The full experiment stack will also need the NVIDIA device plugin, Volcano,
 Prometheus, Grafana, DCGM Exporter, Nsight Compute, and CUDA workload images.
 
 ## Local Check
@@ -39,4 +39,4 @@ make manifests
 make generate
 ```
 
-For a local multi-node GPU lab, see [kind GPU Lab](kind-gpu.md).
+For a local GPU-enabled lab, see [Local GPU Lab](kind-gpu.md).
