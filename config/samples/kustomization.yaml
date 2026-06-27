@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- gpu_v1alpha1_cudaexperiment.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

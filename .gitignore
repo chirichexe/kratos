@@ -1,1 +1,2 @@
 tmp/
+hack/cleanup-kind-gpu-lab.local.sh
