@@ -2,7 +2,37 @@ name: E2E Tests
 
 on:
   push:
+    paths:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - Makefile
+      - Dockerfile
+      - PROJECT
+      - api/**
+      - cmd/**
+      - config/**
+      - internal/**
+      - test/**
+      - cluster/**
+      - hack/**
+      - .github/workflows/test-e2e.yml
   pull_request:
+    paths:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - Makefile
+      - Dockerfile
+      - PROJECT
+      - api/**
+      - cmd/**
+      - config/**
+      - internal/**
+      - test/**
+      - cluster/**
+      - hack/**
+      - .github/workflows/test-e2e.yml
 
 permissions: {}
 

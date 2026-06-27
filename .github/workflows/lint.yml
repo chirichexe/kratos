@@ -2,7 +2,35 @@ name: Lint
 
 on:
   push:
+    paths:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - Makefile
+      - PROJECT
+      - api/**
+      - cmd/**
+      - config/**
+      - internal/**
+      - test/**
+      - hack/**
+      - .golangci.yml
+      - .github/workflows/lint.yml
   pull_request:
+    paths:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - Makefile
+      - PROJECT
+      - api/**
+      - cmd/**
+      - config/**
+      - internal/**
+      - test/**
+      - hack/**
+      - .golangci.yml
+      - .github/workflows/lint.yml
 
 permissions: {}
 

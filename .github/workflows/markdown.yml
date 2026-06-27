@@ -2,9 +2,21 @@ name: Markdown Check
 
 on:
   pull_request:
+    paths:
+      - "**/*.md"
+      - docs/**
+      - .github/pull_request_template.md
+      - .github/ISSUE_TEMPLATE/**
+      - .github/workflows/markdown.yml
   push:
     branches:
       - main
+    paths:
+      - "**/*.md"
+      - docs/**
+      - .github/pull_request_template.md
+      - .github/ISSUE_TEMPLATE/**
+      - .github/workflows/markdown.yml
 
 jobs:
   markdown:

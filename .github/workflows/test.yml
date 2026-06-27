@@ -2,7 +2,33 @@ name: Tests
 
 on:
   push:
+    paths:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - Makefile
+      - PROJECT
+      - api/**
+      - cmd/**
+      - config/**
+      - internal/**
+      - test/**
+      - hack/**
+      - .github/workflows/test.yml
   pull_request:
+    paths:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - Makefile
+      - PROJECT
+      - api/**
+      - cmd/**
+      - config/**
+      - internal/**
+      - test/**
+      - hack/**
+      - .github/workflows/test.yml
 
 permissions: {}
 
