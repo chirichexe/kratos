@@ -1,2 +1,28 @@
+# Local build and tool outputs
+bin/
+dist/
+cover.out
+Dockerfile.cross
+
+# Temporary files
 tmp/
+*.tmp
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Local helper scripts
 hack/cleanup-kind-gpu-lab.local.sh
