@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-compute-bound
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: gpu-compute
+          image: kratos-gpu-kernel-test:latest
+          imagePullPolicy: IfNotPresent
+          args: ["compute"]
+          resources:
+            limits:
+              nvidia.com/gpu: 1

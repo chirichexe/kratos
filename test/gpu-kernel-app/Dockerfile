@@ -8,7 +8,7 @@ COPY main.cu .
 
 RUN nvcc -O2 -std=c++17 -o /usr/local/bin/gpu-kernel main.cu
 
-FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
+FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu${UBUNTU_VERSION}
 
 COPY --from=build /usr/local/bin/gpu-kernel /usr/local/bin/gpu-kernel
 
