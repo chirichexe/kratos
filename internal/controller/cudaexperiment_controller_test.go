@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -80,8 +81,12 @@ var _ = Describe("CUDAExperiment Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			err = k8sClient.Get(ctx, typeNamespacedName, cudaexperiment)
+			Expect(err).NotTo(HaveOccurred())
+			condition := meta.FindStatusCondition(cudaexperiment.Status.Conditions, "Applied")
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Reason).To(Equal("Observed"))
 		})
 	})
 })

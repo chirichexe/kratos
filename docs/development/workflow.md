@@ -23,7 +23,7 @@ Use this short loop for normal changes:
 ```bash
 make manifests
 make generate
-go test ./...
+make test
 ```
 
 For a manual cluster check after manifests are generated:
@@ -32,4 +32,20 @@ For a manual cluster check after manifests are generated:
 kubectl apply -k config/default
 kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
 kubectl get cudaexperiments.gpu.scheduler.io
+```
+
+## Local Controller Smoke Test
+
+Run the controller against the current Kubernetes context:
+
+```bash
+make install
+make run
+```
+
+In another terminal, apply the sample resource:
+
+```bash
+kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiments.gpu.scheduler.io cuda-vector-add -o yaml
 ```

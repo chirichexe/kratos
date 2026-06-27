@@ -19,13 +19,35 @@ Prometheus, Grafana, DCGM Exporter, Nsight Compute, and CUDA workload images.
 ```bash
 git clone git@github.com:chirichexe/kratos.git
 cd kratos
-go test ./...
+make test
 ```
 
-If the default Go build cache is not writable:
+The `make test` target prepares envtest binaries before running controller
+tests. If the default Go build cache is not writable, override it:
 
 ```bash
-GOCACHE=/tmp/kratos-go-build-cache go test ./...
+GOCACHE=/tmp/kratos-go-build-cache make test
+```
+
+## Run Locally
+
+Install the `CUDAExperiment` CRD into the current Kubernetes context:
+
+```bash
+make install
+```
+
+Run the controller from your host:
+
+```bash
+make run
+```
+
+Apply the sample custom resource from another terminal:
+
+```bash
+kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiments.gpu.scheduler.io
 ```
 
 ## Kubebuilder Setup

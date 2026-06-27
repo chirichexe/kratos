@@ -19,6 +19,14 @@ The framework does not replace Kubernetes or Volcano. It adds an intermediate
 decision layer that learns from previous executions, scores eligible nodes, and
 generates scheduling hints that Volcano can use for final placement.
 
+The current design goal is to let users describe CUDA workloads together with
+their scheduling requirements, such as GPU memory, compute capability, priority,
+replica count, and distributed constraints. After an initial execution, the
+controller is expected to collect profiling information, for example whether a
+kernel is compute-bound or memory-bound, and reuse that profile to score nodes
+for later runs. This makes the scheduling policy application-aware while keeping
+Volcano available as a future final scheduler integration.
+
 ## Status
 
 The repository is currently a lightweight Kubebuilder-style scaffold. It
@@ -33,6 +41,43 @@ Planned integrations include:
   and final placement.
 - NVIDIA Nsight Compute and DCGM for CUDA profiling and GPU metrics.
 - Prometheus and Grafana for runtime observability.
+
+## Getting Started
+
+Clone the repository and run the local test suite:
+
+```bash
+git clone git@github.com:chirichexe/kratos.git
+cd kratos
+make test
+```
+
+The `make test` target generates Kubernetes manifests, regenerates deepcopy
+code, runs formatting and vet checks, downloads envtest binaries, and then runs
+the Go tests.
+
+Install the CRD into the Kubernetes cluster selected by your current
+`kubectl` context:
+
+```bash
+make install
+```
+
+Run the controller locally against that cluster:
+
+```bash
+make run
+```
+
+In another terminal, create a sample CUDA workload:
+
+```bash
+kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiments.gpu.scheduler.io
+```
+
+For a local GPU-enabled Kubernetes lab, see
+[Local GPU Lab](docs/getting-started/kind-gpu.md).
 
 ## CUDAExperiment
 
@@ -65,7 +110,7 @@ hints, Volcano submission, and profile updates after execution.
 Run the package tests:
 
 ```bash
-go test ./...
+make test
 ```
 
 Regenerate Kubernetes assets after API or RBAC changes:

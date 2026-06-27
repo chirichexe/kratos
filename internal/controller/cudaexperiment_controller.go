@@ -19,6 +19,9 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,9 +50,34 @@ type CUDAExperimentReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.24.1/pkg/reconcile
 func (r *CUDAExperimentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	var experiment gpuv1alpha1.CUDAExperiment
+	if err := r.Get(ctx, req.NamespacedName, &experiment); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	condition := meta.FindStatusCondition(experiment.Status.Conditions, "Applied")
+	if condition != nil && condition.ObservedGeneration == experiment.Generation {
+		log.Info("State changed!")
+		return ctrl.Result{}, nil
+	}
+
+	log.Info("Applied!")
+	meta.SetStatusCondition(&experiment.Status.Conditions, metav1.Condition{
+		Type:               "Applied",
+		Status:             metav1.ConditionTrue,
+		Reason:             "Observed",
+		Message:            "CUDAExperiment was observed by the controller.",
+		ObservedGeneration: experiment.Generation,
+	})
+
+	if err := r.Status().Update(ctx, &experiment); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
 	return ctrl.Result{}, nil
 }

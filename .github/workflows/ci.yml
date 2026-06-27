@@ -21,4 +21,4 @@ jobs:
         run: test -z "$(gofmt -l $(find . -name '*.go'))"
 
       - name: Run tests
-        run: go test ./...
+        run: make test
