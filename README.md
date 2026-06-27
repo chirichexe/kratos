@@ -42,6 +42,10 @@ Planned integrations include:
 - NVIDIA Nsight Compute and DCGM for CUDA profiling and GPU metrics.
 - Prometheus and Grafana for runtime observability.
 
+## Architecture
+
+![KRATOS architectural diagram](docs/assets/architectural-diagram.drawio.png)
+
 ## Getting Started
 
 Clone the repository and run the local test suite:
