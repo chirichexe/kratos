@@ -15,15 +15,15 @@
 KRATOS is a Kubernetes operator for studying application-aware
 GPU scheduling of CUDA workloads on heterogeneous clusters.
 
-The framework does not replace Kubernetes or Volcano. It adds an *intermediate
-decision layer* that learns from previous executions, scores eligible nodes, and
+The framework does not replace Kubernetes or Volcano. It adds an **intermediate
+decision layer** that learns from previous executions, scores eligible nodes, and
 generates scheduling hints.
 
-The current design goal is to let users describe CUDA workloads together with
+The current design goal is to let users describe **CUDA workloads** together with
 their scheduling requirements, such as GPU memory, compute capability, priority,
 replica count, and distributed constraints. 
 
-After an initial execution, the controller is expected to collect *profiling information* from *nsight-compute*
+After an initial execution, the controller is expected to collect **profiling information** from *nsight-compute*
 (e.g. if a kernel is compute-bound or memory-bound) and reuse that profile to score nodes
 for later runs, in order to make the scheduling policy application-aware.
 
@@ -31,9 +31,9 @@ for later runs, in order to make the scheduling policy application-aware.
 
 Planned integrations include:
 
-- Kubernetes for resource lifecycle management.
-- NVIDIA Nsight Compute and DCGM for CUDA profiling and GPU metrics.
-- Prometheus and Grafana for runtime observability.
+- Kubernetes for resource **lifecycle management**.
+- NVIDIA Nsight Compute and DCGM for CUDA **profiling** and GPU metrics.
+- Prometheus and Grafana for runtime **observability**.
 
 ## Architecture
 
