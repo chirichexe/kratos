@@ -12,33 +12,26 @@
 
 </div>
 
-KRATOS is an academic Kubernetes operator project for studying application-aware
+KRATOS is a Kubernetes operator for studying application-aware
 GPU scheduling of CUDA workloads on heterogeneous clusters.
 
-The framework does not replace Kubernetes or Volcano. It adds an intermediate
-decision layer that learns from previous executions, scores eligible nodes, and
-generates scheduling hints that Volcano can use for final placement.
+The framework does not replace Kubernetes or Volcano. It adds an *intermediate
+decision layer* that learns from previous executions, scores eligible nodes, and
+generates scheduling hints.
 
 The current design goal is to let users describe CUDA workloads together with
 their scheduling requirements, such as GPU memory, compute capability, priority,
-replica count, and distributed constraints. After an initial execution, the
-controller is expected to collect profiling information, for example whether a
-kernel is compute-bound or memory-bound, and reuse that profile to score nodes
-for later runs. This makes the scheduling policy application-aware while keeping
-Volcano available as a future final scheduler integration.
+replica count, and distributed constraints. 
+
+After an initial execution, the controller is expected to collect *profiling information* from *nsight-compute*
+(e.g. if a kernel is compute-bound or memory-bound) and reuse that profile to score nodes
+for later runs, in order to make the scheduling policy application-aware.
 
 ## Status
-
-The repository is currently a lightweight Kubebuilder-style scaffold. It
-defines the `CUDAExperiment` API direction, controller boundary, and domain
-packages for workload profiling, profile storage, scheduling decisions,
-telemetry, Volcano integration, and workload construction.
 
 Planned integrations include:
 
 - Kubernetes for resource lifecycle management.
-- Volcano for queueing, gang scheduling, priorities, preemption, fair sharing,
-  and final placement.
 - NVIDIA Nsight Compute and DCGM for CUDA profiling and GPU metrics.
 - Prometheus and Grafana for runtime observability.
 
