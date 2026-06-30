@@ -129,6 +129,61 @@ spec:
               nvidia.com/gpu: 1
 ```
 
+## Run the Profiling Runner Variant
+
+`job-sidecar.yaml` demonstrates the profiling runner pattern. The workload
+container uses the NVIDIA `vectorAdd` sample image and does not contain Nsight
+Compute. It copies `/cuda-samples/vectorAdd` into a shared `emptyDir` and waits.
+The `nsight-compute-sidecar` container is the Nsight Compute profiling runner:
+it owns `ncu`, requests `nvidia.com/gpu: 1`, launches the staged workload under
+`ncu`, imports the `.ncu-rep`, prints raw metrics, and signals the workload
+container to exit.
+
+Run it with:
+
+```bash
+make clean-sidecar
+make apply-sidecar
+kubectl wait --for=condition=complete job/nsight-compute-vectoradd-sidecar --timeout=240s
+make logs-sidecar
+```
+
+Expected profiling runner log markers:
+
+- `nvidia-smi` succeeds.
+- `ncu --version` succeeds.
+- `Test PASSED` appears for the CUDA workload.
+- `ncu` profiles `vectorAdd` in multiple passes.
+- raw metrics include entries such as `sm__throughput`,
+  `lts__throughput`, and `profiler__replayer_passes`.
+- `/shared/nsight-compute/vectoradd.ncu-rep` is listed.
+
+This pattern keeps the profiler image independent from the workload image. It
+does not attach to an arbitrary already-running process in the workload
+container; Nsight Compute needs to launch or attach to an application prepared
+for Nsight Compute profiling.
+
+## Run the Explicit NVIDIA Sample Profiling Runner Example
+
+`job-sidecar-nvidia-sample.yaml` is a concrete example with:
+
+- workload container: `nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0`;
+- profiling runner: `kratos-nsight-compute-poc:latest`;
+- shared volume: `emptyDir`;
+- GPU request only on the `ncu-sidecar` container.
+
+Run it with:
+
+```bash
+make clean-nvidia-sample-sidecar
+make apply-nvidia-sample-sidecar
+kubectl wait --for=condition=complete job/nsight-compute-nvidia-sample-sidecar --timeout=240s
+make logs-nvidia-sample-sidecar
+```
+
+Expected log markers are the same as the generic profiling runner example, with
+the report written to `/shared/nsight-compute/nvidia-vectoradd.ncu-rep`.
+
 ## Verification Criteria
 
 The PoC is successful when the Job reaches `Complete` and logs show all of:

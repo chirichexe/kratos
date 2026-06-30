@@ -179,8 +179,9 @@ func main() {
 	}
 
 	if err := (&controller.CUDAExperimentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		NsightComputeImage: os.Getenv("KRATOS_NSIGHT_COMPUTE_IMAGE"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "cudaexperiment")
 		os.Exit(1)
