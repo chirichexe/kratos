@@ -30,3 +30,7 @@ memory utilization, active workloads, power consumption, temperature, and
 profile reuse rate.
 
 For distributed scenarios, also track bandwidth, latency, and topology effects.
+
+## Proofs of Concept
+
+- [Nsight Compute Kubernetes PoC](nsight-compute-poc.md)

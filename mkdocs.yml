@@ -11,7 +11,9 @@ nav:
       - Local GPU Lab: getting-started/kind-gpu.md
   - Architecture: architecture/README.md
   - Operator: operator/README.md
-  - Experiments: experiments/README.md
+  - Experiments:
+      - Overview: experiments/README.md
+      - Nsight Compute PoC: experiments/nsight-compute-poc.md
   - Development:
       - Workflow: development/workflow.md
       - Project Structure: development/project-layout.md
