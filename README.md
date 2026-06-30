@@ -102,14 +102,14 @@ The current controller creates one Kubernetes Job named
 `<experiment-name>-execution`, sets the NVIDIA GPU limit from `gpuRequired`,
 uses the configured runtime class, and records the Job name in status.
 
-When `profilingEnabled: true`, the controller creates a two-container Job:
+When `profilingEnabled: true`, the controller creates a profiled Job:
 
-- `workload` uses the experiment image, stages the CUDA executable into a shared
-  volume, and waits for profiling to finish.
-- `nsight-compute-sidecar` is the controller-owned Nsight Compute profiling
-  runner. It uses the Nsight Compute image, requests the GPU, launches the
-  staged workload under `ncu`, imports the generated `.ncu-rep`, and prints raw
-  metrics in its logs.
+- `stage-workload` is an initContainer that uses the experiment image and stages
+  the CUDA executable into a shared volume.
+- `profiling-runner` is the controller-owned Nsight Compute container. It uses
+  the Nsight Compute image, requests the GPU, launches the staged workload once
+  under `ncu`, imports the generated `.ncu-rep`, and prints raw metrics in its
+  logs.
 
 The default profiling runner image is `kratos-nsight-compute-poc:latest`. Set
 `KRATOS_NSIGHT_COMPUTE_IMAGE` on the controller manager to use a registry image.

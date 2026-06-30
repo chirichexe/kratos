@@ -42,25 +42,25 @@ Nsight Compute metric output for the `vectorAdd` kernel.
 Run the profiling runner variant:
 
 ```bash
-make clean-sidecar
-make apply-sidecar
-kubectl wait --for=condition=complete job/nsight-compute-vectoradd-sidecar --timeout=240s
-make logs-sidecar
+make clean-runner
+make apply-runner
+kubectl wait --for=condition=complete job/nsight-compute-vectoradd-runner --timeout=240s
+make logs-runner
 ```
 
 In this variant, the workload image does not include Nsight Compute. It stages
-the CUDA executable into a shared `emptyDir`, while the `nsight-compute-sidecar`
-container acts as the Nsight Compute profiling runner: it owns `ncu`, requests
-the GPU, launches the staged executable under `ncu`, imports the generated
-report, and prints raw metrics in its logs.
+the CUDA executable into a shared `emptyDir` through an initContainer, while the
+`profiling-runner` container owns `ncu`, requests the GPU, launches the staged
+executable once under `ncu`, imports the generated report, and prints raw
+metrics in its logs.
 
 Run the explicit NVIDIA sample workload profiling runner example:
 
 ```bash
-make clean-nvidia-sample-sidecar
-make apply-nvidia-sample-sidecar
-kubectl wait --for=condition=complete job/nsight-compute-nvidia-sample-sidecar --timeout=240s
-make logs-nvidia-sample-sidecar
+make clean-nvidia-sample-runner
+make apply-nvidia-sample-runner
+kubectl wait --for=condition=complete job/nsight-compute-nvidia-sample-runner --timeout=240s
+make logs-nvidia-sample-runner
 ```
 
 This version uses `nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0` as the
@@ -126,11 +126,11 @@ when a `CUDAExperiment` has `spec.profilingEnabled: true`.
 
 The generated Job keeps the workload image independent from `ncu`:
 
-- `workload` uses `spec.image`, stages the CUDA executable into a shared
-  `emptyDir`, and waits.
-- `nsight-compute-sidecar` is the controller-owned profiling runner. It uses
-  `kratos-nsight-compute-poc:latest` by default, requests the GPU, launches the
-  staged executable under `ncu`, imports the report, and logs raw metrics.
+- `stage-workload` uses `spec.image`, stages the CUDA executable into a shared
+  `emptyDir`, and exits.
+- `profiling-runner` uses `kratos-nsight-compute-poc:latest` by default,
+  requests the GPU, launches the staged executable once under `ncu`, imports the
+  report, and logs raw metrics.
 
 Override the profiler image by setting `KRATOS_NSIGHT_COMPUTE_IMAGE` on the
 controller manager. For custom workload images, set `spec.command[0]` to the
@@ -144,7 +144,7 @@ kubectl apply -f - <<'EOF'
 apiVersion: gpu.scheduler.io/v1alpha1
 kind: CUDAExperiment
 metadata:
-  name: controller-sidecar-vectoradd
+  name: controller-runner-vectoradd
 spec:
   image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
   runtimeClassName: nvidia
@@ -153,10 +153,10 @@ spec:
   profilingEnabled: true
 EOF
 
-kubectl logs job/controller-sidecar-vectoradd-execution -c nsight-compute-sidecar
+kubectl logs job/controller-runner-vectoradd-execution -c profiling-runner
 ```
 
 The profiling runner logs included `ncu --version`, `Test PASSED`,
 `Profiling "vectorAdd" ... - 8 passes`, `sm__throughput`, `lts__throughput`,
 `profiler__replayer_passes`, and
-`/shared/nsight-compute/controller-sidecar-vectoradd.ncu-rep`.
+`/shared/nsight-compute/controller-runner-vectoradd.ncu-rep`.

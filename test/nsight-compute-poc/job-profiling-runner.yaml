@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nsight-compute-vectoradd-runner
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      runtimeClassName: nvidia
+      restartPolicy: Never
+      initContainers:
+        - name: stage-workload
+          image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              cp /cuda-samples/vectorAdd /shared/vectorAdd
+              chmod +x /shared/vectorAdd
+              echo "Staged workload executable for profiling runner"
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      containers:
+        - name: profiling-runner
+          image: kratos-nsight-compute-poc:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NCU_KERNEL_NAME
+              value: regex:vectorAdd
+          command:
+            - /scripts/profile.sh
+            - /shared/vectorAdd
+            - /shared/nsight-compute/vectoradd
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+      volumes:
+        - name: shared
+          emptyDir: {}

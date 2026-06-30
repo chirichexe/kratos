@@ -1,11 +1,11 @@
 IMAGE ?= kratos-nsight-compute-poc:latest
 CLUSTER ?= kratos-gpu
 JOB ?= nsight-compute-vectoradd
-SIDECAR_JOB ?= nsight-compute-vectoradd-sidecar
-NVIDIA_SAMPLE_SIDECAR_JOB ?= nsight-compute-nvidia-sample-sidecar
+RUNNER_JOB ?= nsight-compute-vectoradd-runner
+NVIDIA_SAMPLE_RUNNER_JOB ?= nsight-compute-nvidia-sample-runner
 GPUS ?= all
 
-.PHONY: build run load apply apply-sidecar apply-nvidia-sample-sidecar logs logs-sidecar logs-nvidia-sample-sidecar clean clean-sidecar clean-nvidia-sample-sidecar
+.PHONY: build run load apply apply-runner apply-nvidia-sample-runner logs logs-runner logs-nvidia-sample-runner clean clean-runner clean-nvidia-sample-runner
 
 build:
 	docker build -t $(IMAGE) .
@@ -19,26 +19,26 @@ load:
 apply:
 	kubectl apply -f job.yaml
 
-apply-sidecar:
-	kubectl apply -f job-sidecar.yaml
+apply-runner:
+	kubectl apply -f job-profiling-runner.yaml
 
-apply-nvidia-sample-sidecar:
-	kubectl apply -f job-sidecar-nvidia-sample.yaml
+apply-nvidia-sample-runner:
+	kubectl apply -f job-profiling-runner-nvidia-sample.yaml
 
 logs:
 	kubectl logs job/$(JOB)
 
-logs-sidecar:
-	kubectl logs job/$(SIDECAR_JOB) -c nsight-compute-sidecar
+logs-runner:
+	kubectl logs job/$(RUNNER_JOB) -c profiling-runner
 
-logs-nvidia-sample-sidecar:
-	kubectl logs job/$(NVIDIA_SAMPLE_SIDECAR_JOB) -c ncu-sidecar
+logs-nvidia-sample-runner:
+	kubectl logs job/$(NVIDIA_SAMPLE_RUNNER_JOB) -c profiling-runner
 
 clean:
 	kubectl delete job $(JOB) --ignore-not-found
 
-clean-sidecar:
-	kubectl delete job $(SIDECAR_JOB) --ignore-not-found
+clean-runner:
+	kubectl delete job $(RUNNER_JOB) --ignore-not-found
 
-clean-nvidia-sample-sidecar:
-	kubectl delete job $(NVIDIA_SAMPLE_SIDECAR_JOB) --ignore-not-found
+clean-nvidia-sample-runner:
+	kubectl delete job $(NVIDIA_SAMPLE_RUNNER_JOB) --ignore-not-found

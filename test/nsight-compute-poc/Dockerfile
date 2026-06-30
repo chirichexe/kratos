@@ -7,6 +7,7 @@ ARG NSIGHT_COMPUTE_PACKAGE=nsight-compute-2025.2.1
 WORKDIR /src
 COPY vectoradd.cu .
 COPY run-profile.sh /usr/local/bin/run-profile
+COPY profile.sh /scripts/profile.sh
 
 RUN apt-get update \
     && if ! command -v ncu >/dev/null 2>&1; then \
@@ -14,7 +15,7 @@ RUN apt-get update \
     fi \
     && rm -rf /var/lib/apt/lists/* \
     && nvcc -O2 -lineinfo -std=c++17 -o /usr/local/bin/vectoradd vectoradd.cu \
-    && chmod +x /usr/local/bin/run-profile \
+    && chmod +x /usr/local/bin/run-profile /scripts/profile.sh \
     && if ! command -v ncu >/dev/null 2>&1; then \
       ncu_path="$(find /opt/nvidia -path '*nsight-compute*/ncu' -type f | grep -v '/target/' | head -n 1)" \
       && printf '#!/bin/sh\nexec "%s" "$@"\n' "${ncu_path}" > /usr/local/bin/ncu \

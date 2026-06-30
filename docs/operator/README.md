@@ -18,15 +18,17 @@ GPU limit.
 
 When `spec.profilingEnabled` is true, the Job contains:
 
-- `workload`: the experiment image. It copies the CUDA executable into a shared
-  `emptyDir` volume and waits for profiling to complete.
-- `nsight-compute-sidecar`: the controller-owned Nsight Compute profiling
-  runner. It requests `nvidia.com/gpu`, runs `nvidia-smi`, runs `ncu --version`,
-  launches the staged workload under `ncu --set basic`, imports the `.ncu-rep`,
-  and prints raw metrics to its logs.
+- `stage-workload`: an initContainer using the experiment image. It copies the
+  CUDA executable into a shared `emptyDir` volume and then exits.
+- `profiling-runner`: the controller-owned Nsight Compute container. It requests
+  `nvidia.com/gpu`, runs `nvidia-smi`, runs `ncu --version`, launches the staged
+  workload once under `ncu --set basic`, imports the `.ncu-rep`, and prints raw
+  metrics to its logs.
 
 The profiling runner image defaults to `kratos-nsight-compute-poc:latest`.
 Override it by setting `KRATOS_NSIGHT_COMPUTE_IMAGE` on the controller manager.
+The image provides `/scripts/profile.sh`, so the controller only passes the
+staged workload path, report path, and workload arguments.
 
 For custom workload images, set `spec.command[0]` to the CUDA executable path
 inside the workload image. If no command is provided, the controller defaults to
@@ -36,7 +38,7 @@ inside the workload image. If no command is provided, the controller defaults to
 Inspect profiling output with:
 
 ```bash
-kubectl logs job/<experiment-name>-execution -c nsight-compute-sidecar
+kubectl logs job/<experiment-name>-execution -c profiling-runner
 ```
 
 The local GPU Kind setup requires `runtimeClassName: nvidia` so CUDA pods are

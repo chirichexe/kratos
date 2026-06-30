@@ -38,6 +38,7 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		const (
 			resourceName      = "test-resource"
 			resourceNamespace = "default"
+			vectorAddArgument = "--iterations=1"
 		)
 
 		ctx := context.Background()
@@ -59,8 +60,8 @@ var _ = Describe("CUDAExperiment Controller", func() {
 					},
 					Spec: gpuv1alpha1.CUDAExperimentSpec{
 						Image:            "nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0",
-						Command:          []string{"/cuda-samples/vectorAdd"},
-						Arguments:        []string{"--iterations=1"},
+						Command:          []string{defaultWorkloadExecutable},
+						Arguments:        []string{vectorAddArgument},
 						Replicas:         1,
 						GPURequired:      1,
 						RuntimeClassName: "nvidia",
@@ -107,40 +108,42 @@ var _ = Describe("CUDAExperiment Controller", func() {
 			Expect(*job.Spec.Template.Spec.RuntimeClassName).To(Equal("nvidia"))
 			Expect(job.Spec.Template.Spec.Volumes).To(HaveLen(1))
 			Expect(job.Spec.Template.Spec.Volumes[0].Name).To(Equal(sharedWorkloadVolumeName))
-			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(2))
+			Expect(job.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 
-			workload := job.Spec.Template.Spec.Containers[0]
-			Expect(workload.Name).To(Equal("workload"))
-			Expect(workload.Image).To(Equal("nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0"))
-			Expect(workload.Command).To(Equal([]string{"/bin/sh", "-c", workloadStagingScript("/cuda-samples/vectorAdd")}))
-			Expect(workload.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			staging := job.Spec.Template.Spec.InitContainers[0]
+			Expect(staging.Name).To(Equal("stage-workload"))
+			Expect(staging.Image).To(Equal("nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0"))
+			Expect(staging.Command).To(Equal([]string{"/bin/sh", "-c", workloadStagingScript(defaultWorkloadExecutable)}))
+			Expect(staging.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 				Name:      sharedWorkloadVolumeName,
 				MountPath: sharedWorkloadMountPath,
 			}))
-			Expect(workload.Resources.Limits).NotTo(HaveKey(corev1.ResourceName("nvidia.com/gpu")))
+			Expect(staging.Resources.Limits).NotTo(HaveKey(corev1.ResourceName("nvidia.com/gpu")))
 
-			sidecar := job.Spec.Template.Spec.Containers[1]
+			runner := job.Spec.Template.Spec.Containers[0]
 			expectedExperiment := &gpuv1alpha1.CUDAExperiment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: resourceNamespace,
 				},
 				Spec: gpuv1alpha1.CUDAExperimentSpec{
-					Arguments: []string{"--iterations=1"},
+					Arguments: []string{vectorAddArgument},
 				},
 			}
-			Expect(sidecar.Name).To(Equal("nsight-compute-sidecar"))
-			Expect(sidecar.Image).To(Equal(defaultNsightComputeImage))
-			Expect(sidecar.ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
-			Expect(sidecar.Command).To(Equal([]string{"/bin/sh", "-c", nsightComputeSidecarScript(expectedExperiment)}))
-			Expect(sidecar.SecurityContext).NotTo(BeNil())
-			Expect(sidecar.SecurityContext.Capabilities).NotTo(BeNil())
-			Expect(sidecar.SecurityContext.Capabilities.Add).To(ContainElement(corev1.Capability("SYS_ADMIN")))
-			Expect(sidecar.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Expect(runner.Name).To(Equal("profiling-runner"))
+			Expect(runner.Image).To(Equal(defaultNsightComputeImage))
+			Expect(runner.ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
+			Expect(runner.Command).To(Equal([]string{"/scripts/profile.sh", sharedWorkloadMountPath + "/workload", profilingReportPath(expectedExperiment)}))
+			Expect(runner.Args).To(Equal([]string{vectorAddArgument}))
+			Expect(runner.SecurityContext).NotTo(BeNil())
+			Expect(runner.SecurityContext.Capabilities).NotTo(BeNil())
+			Expect(runner.SecurityContext.Capabilities.Add).To(ContainElement(corev1.Capability("SYS_ADMIN")))
+			Expect(runner.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 				Name:      sharedWorkloadVolumeName,
 				MountPath: sharedWorkloadMountPath,
 			}))
-			gpuLimit := sidecar.Resources.Limits[corev1.ResourceName("nvidia.com/gpu")]
+			gpuLimit := runner.Resources.Limits[corev1.ResourceName("nvidia.com/gpu")]
 			Expect(gpuLimit.Value()).To(Equal(int64(1)))
 
 			By("Verifying the CUDAExperiment status")
@@ -166,8 +169,8 @@ var _ = Describe("CUDAExperiment Controller", func() {
 				},
 				Spec: gpuv1alpha1.CUDAExperimentSpec{
 					Image:            "nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0",
-					Command:          []string{"/cuda-samples/vectorAdd"},
-					Arguments:        []string{"--iterations=1"},
+					Command:          []string{defaultWorkloadExecutable},
+					Arguments:        []string{vectorAddArgument},
 					Replicas:         1,
 					GPURequired:      1,
 					RuntimeClassName: "nvidia",
@@ -196,12 +199,13 @@ var _ = Describe("CUDAExperiment Controller", func() {
 			}, job)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(job.Spec.Template.Spec.Volumes).To(BeEmpty())
+			Expect(job.Spec.Template.Spec.InitContainers).To(BeEmpty())
 			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 			container := job.Spec.Template.Spec.Containers[0]
 			Expect(container.Name).To(Equal("execution"))
 			Expect(container.Image).To(Equal("nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0"))
-			Expect(container.Command).To(Equal([]string{"/cuda-samples/vectorAdd"}))
-			Expect(container.Args).To(Equal([]string{"--iterations=1"}))
+			Expect(container.Command).To(Equal([]string{defaultWorkloadExecutable}))
+			Expect(container.Args).To(Equal([]string{vectorAddArgument}))
 			gpuLimit := container.Resources.Limits[corev1.ResourceName("nvidia.com/gpu")]
 			Expect(gpuLimit.Value()).To(Equal(int64(1)))
 		})

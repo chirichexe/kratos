@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,6 +40,7 @@ const (
 	executionJobNameSuffix    = "-execution"
 	defaultRuntimeClassName   = "nvidia"
 	defaultNsightComputeImage = "kratos-nsight-compute-poc:latest"
+	defaultWorkloadExecutable = "/cuda-samples/vectorAdd"
 	sharedWorkloadVolumeName  = "workload"
 	sharedWorkloadMountPath   = "/shared"
 )
@@ -158,6 +160,7 @@ func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1al
 				Spec: corev1.PodSpec{
 					RuntimeClassName: ptrTo(runtimeClassNameForExperiment(experiment)),
 					RestartPolicy:    corev1.RestartPolicyNever,
+					InitContainers:   initContainersForExperiment(experiment),
 					Containers:       containersForExperiment(experiment, gpuCount, r.nsightComputeImage()),
 					Volumes:          volumesForExperiment(experiment),
 				},
@@ -178,9 +181,15 @@ func containersForExperiment(experiment *gpuv1alpha1.CUDAExperiment, gpuCount in
 		return []corev1.Container{executionContainerForExperiment(experiment, gpuCount)}
 	}
 	return []corev1.Container{
-		workloadStagingContainerForExperiment(experiment),
-		nsightComputeSidecarForExperiment(experiment, gpuCount, nsightComputeImage),
+		profilingRunnerForExperiment(experiment, gpuCount, nsightComputeImage),
 	}
+}
+
+func initContainersForExperiment(experiment *gpuv1alpha1.CUDAExperiment) []corev1.Container {
+	if !experiment.Spec.ProfilingEnabled {
+		return nil
+	}
+	return []corev1.Container{workloadStagingInitContainerForExperiment(experiment)}
 }
 
 func executionContainerForExperiment(experiment *gpuv1alpha1.CUDAExperiment, gpuCount int32) corev1.Container {
@@ -197,9 +206,9 @@ func executionContainerForExperiment(experiment *gpuv1alpha1.CUDAExperiment, gpu
 	}
 }
 
-func workloadStagingContainerForExperiment(experiment *gpuv1alpha1.CUDAExperiment) corev1.Container {
+func workloadStagingInitContainerForExperiment(experiment *gpuv1alpha1.CUDAExperiment) corev1.Container {
 	return corev1.Container{
-		Name:    "workload",
+		Name:    "stage-workload",
 		Image:   experiment.Spec.Image,
 		Command: []string{"/bin/sh", "-c", workloadStagingScript(workloadExecutablePath(experiment))},
 		VolumeMounts: []corev1.VolumeMount{
@@ -211,12 +220,13 @@ func workloadStagingContainerForExperiment(experiment *gpuv1alpha1.CUDAExperimen
 	}
 }
 
-func nsightComputeSidecarForExperiment(experiment *gpuv1alpha1.CUDAExperiment, gpuCount int32, nsightComputeImage string) corev1.Container {
+func profilingRunnerForExperiment(experiment *gpuv1alpha1.CUDAExperiment, gpuCount int32, nsightComputeImage string) corev1.Container {
 	return corev1.Container{
-		Name:            "nsight-compute-sidecar",
+		Name:            "profiling-runner",
 		Image:           nsightComputeImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"/bin/sh", "-c", nsightComputeSidecarScript(experiment)},
+		Command:         []string{"/scripts/profile.sh", sharedWorkloadMountPath + "/workload", profilingReportPath(experiment)},
+		Args:            experiment.Spec.Arguments,
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities: &corev1.Capabilities{
 				Add: []corev1.Capability{"SYS_ADMIN"},
@@ -254,7 +264,7 @@ func workloadExecutablePath(experiment *gpuv1alpha1.CUDAExperiment) string {
 	if len(experiment.Spec.Command) > 0 && experiment.Spec.Command[0] != "" {
 		return experiment.Spec.Command[0]
 	}
-	return "/cuda-samples/vectorAdd"
+	return defaultWorkloadExecutable
 }
 
 func workloadStagingScript(workloadPath string) string {
@@ -265,67 +275,26 @@ if [ ! -x %[1]s ]; then
 fi
 cp %[1]s %[2]s/workload
 chmod +x %[2]s/workload
-touch %[2]s/workload-ready
-echo "Workload artifact is ready for Nsight Compute profiling runner"
-while [ ! -f %[2]s/profiling-done ]; do
-  sleep 1
-done
-echo "Nsight Compute profiling runner completed"
+echo "Staged workload executable for Nsight Compute profiling runner"
 `, shellQuote(workloadPath), sharedWorkloadMountPath)
 }
 
-func nsightComputeSidecarScript(experiment *gpuv1alpha1.CUDAExperiment) string {
-	reportPath := sharedWorkloadMountPath + "/nsight-compute/" + experiment.Name
-	workloadArgs := shellJoin(experiment.Spec.Arguments)
-	return fmt.Sprintf(`set -eu
-trap 'touch %[1]s/profiling-done' EXIT
-mkdir -p %[1]s/nsight-compute
-while [ ! -f %[1]s/workload-ready ]; do
-  sleep 1
-done
-echo "== nvidia-smi =="
-nvidia-smi
-echo "== ncu --version =="
-ncu --version
-echo "== workload smoke test =="
-%[1]s/workload%[2]s
-echo "== ncu profiling runner =="
-ncu --target-processes all \
-  --set basic \
-  --launch-count 1 \
-  --force-overwrite \
-  --export %[3]s \
-  %[1]s/workload%[2]s
-echo "== ncu imported raw metrics =="
-ncu --import %[3]s.ncu-rep \
-  --page raw \
-  --print-units base
-echo "== generated reports =="
-ls -lh %[1]s/nsight-compute
-`, sharedWorkloadMountPath, workloadArgs, reportPath)
-}
-
-func shellJoin(values []string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	quoted := ""
-	for _, value := range values {
-		quoted += " " + shellQuote(value)
-	}
-	return quoted
-}
-
 func shellQuote(value string) string {
-	quoted := "'"
+	var quoted strings.Builder
+	quoted.WriteByte('\'')
 	for _, r := range value {
 		if r == '\'' {
-			quoted += "'\\''"
+			quoted.WriteString("'\\''")
 			continue
 		}
-		quoted += string(r)
+		quoted.WriteRune(r)
 	}
-	return quoted + "'"
+	quoted.WriteByte('\'')
+	return quoted.String()
+}
+
+func profilingReportPath(experiment *gpuv1alpha1.CUDAExperiment) string {
+	return sharedWorkloadMountPath + "/nsight-compute/" + experiment.Name
 }
 
 func runtimeClassNameForExperiment(experiment *gpuv1alpha1.CUDAExperiment) string {

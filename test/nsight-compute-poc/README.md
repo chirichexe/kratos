@@ -131,21 +131,22 @@ spec:
 
 ## Run the Profiling Runner Variant
 
-`job-sidecar.yaml` demonstrates the profiling runner pattern. The workload
-container uses the NVIDIA `vectorAdd` sample image and does not contain Nsight
-Compute. It copies `/cuda-samples/vectorAdd` into a shared `emptyDir` and waits.
-The `nsight-compute-sidecar` container is the Nsight Compute profiling runner:
-it owns `ncu`, requests `nvidia.com/gpu: 1`, launches the staged workload under
-`ncu`, imports the `.ncu-rep`, prints raw metrics, and signals the workload
-container to exit.
+`job-profiling-runner.yaml` demonstrates the profiling runner pattern. The workload
+initContainer uses the NVIDIA `vectorAdd` sample image and does not contain
+Nsight Compute. It copies `/cuda-samples/vectorAdd` into a shared `emptyDir` and
+exits. The `profiling-runner` container owns `ncu`, requests
+`nvidia.com/gpu: 1`, launches the staged workload once under `ncu`, imports the
+`.ncu-rep`, and prints raw metrics.
+The runner logic lives in `/scripts/profile.sh` inside the Nsight Compute image;
+the manifest only passes the workload path and report path.
 
 Run it with:
 
 ```bash
-make clean-sidecar
-make apply-sidecar
-kubectl wait --for=condition=complete job/nsight-compute-vectoradd-sidecar --timeout=240s
-make logs-sidecar
+make clean-runner
+make apply-runner
+kubectl wait --for=condition=complete job/nsight-compute-vectoradd-runner --timeout=240s
+make logs-runner
 ```
 
 Expected profiling runner log markers:
@@ -165,20 +166,21 @@ for Nsight Compute profiling.
 
 ## Run the Explicit NVIDIA Sample Profiling Runner Example
 
-`job-sidecar-nvidia-sample.yaml` is a concrete example with:
+`job-profiling-runner-nvidia-sample.yaml` is a concrete example with:
 
-- workload container: `nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0`;
+- workload staging initContainer:
+  `nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0`;
 - profiling runner: `kratos-nsight-compute-poc:latest`;
 - shared volume: `emptyDir`;
-- GPU request only on the `ncu-sidecar` container.
+- GPU request only on the `profiling-runner` container.
 
 Run it with:
 
 ```bash
-make clean-nvidia-sample-sidecar
-make apply-nvidia-sample-sidecar
-kubectl wait --for=condition=complete job/nsight-compute-nvidia-sample-sidecar --timeout=240s
-make logs-nvidia-sample-sidecar
+make clean-nvidia-sample-runner
+make apply-nvidia-sample-runner
+kubectl wait --for=condition=complete job/nsight-compute-nvidia-sample-runner --timeout=240s
+make logs-nvidia-sample-runner
 ```
 
 Expected log markers are the same as the generic profiling runner example, with
