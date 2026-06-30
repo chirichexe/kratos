@@ -40,19 +40,27 @@ spec:
             description: spec defines the desired state of CUDAExperiment
             properties:
               arguments:
+                description: arguments are passed to the container entrypoint or command.
                 items:
                   type: string
                 type: array
               command:
+                description: command overrides the image entrypoint when set.
                 items:
                   type: string
                 type: array
               distributed:
                 type: boolean
               gpuRequired:
+                default: 1
+                description: gpuRequired is the number of NVIDIA GPUs requested by
+                  each pod.
                 format: int32
+                minimum: 1
                 type: integer
               image:
+                description: image is the CUDA workload container image.
+                minLength: 1
                 type: string
               maxLatency:
                 type: string
@@ -73,8 +81,17 @@ spec:
               profilingEnabled:
                 type: boolean
               replicas:
+                default: 1
+                description: replicas is the number of Job pods to run.
                 format: int32
+                minimum: 1
                 type: integer
+              runtimeClassName:
+                default: nvidia
+                description: runtimeClassName selects the container runtime handler
+                  used for CUDA pods.
+                minLength: 1
+                type: string
             required:
             - image
             type: object
@@ -150,6 +167,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              executionJobName:
+                description: executionJobName is the name of the Kubernetes Job created
+                  for this experiment.
+                type: string
             type: object
         required:
         - spec

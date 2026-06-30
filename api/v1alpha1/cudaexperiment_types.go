@@ -26,29 +26,53 @@ import (
 
 // CUDAExperimentSpec defines the desired state of CUDAExperiment.
 type CUDAExperimentSpec struct {
-	Image                       string   `json:"image"`
-	Command                     []string `json:"command,omitempty"`
-	Arguments                   []string `json:"arguments,omitempty"`
-	Replicas                    int32    `json:"replicas,omitempty"`
-	GPURequired                 int32    `json:"gpuRequired,omitempty"`
-	MinimumComputeCapability    string   `json:"minimumComputeCapability,omitempty"`
-	MinimumMemory               string   `json:"minimumMemory,omitempty"`
-	Priority                    string   `json:"priority,omitempty"`
-	ProfilingEnabled            bool     `json:"profilingEnabled,omitempty"`
-	Distributed                 bool     `json:"distributed,omitempty"`
-	NumberOfGPUs                int32    `json:"numberOfGPUs,omitempty"`
-	NumberOfNodes               int32    `json:"numberOfNodes,omitempty"`
-	MaxLatency                  string   `json:"maxLatency,omitempty"`
-	NetworkBandwidthRequirement string   `json:"networkBandwidthRequirement,omitempty"`
+	// image is the CUDA workload container image.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// command overrides the image entrypoint when set.
+	// +optional
+	Command []string `json:"command,omitempty"`
+
+	// arguments are passed to the container entrypoint or command.
+	// +optional
+	Arguments []string `json:"arguments,omitempty"`
+
+	// replicas is the number of Job pods to run.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// gpuRequired is the number of NVIDIA GPUs requested by each pod.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	GPURequired int32 `json:"gpuRequired,omitempty"`
+
+	// runtimeClassName selects the container runtime handler used for CUDA pods.
+	// +kubebuilder:default="nvidia"
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	RuntimeClassName string `json:"runtimeClassName,omitempty"`
+
+	MinimumComputeCapability    string `json:"minimumComputeCapability,omitempty"`
+	MinimumMemory               string `json:"minimumMemory,omitempty"`
+	Priority                    string `json:"priority,omitempty"`
+	ProfilingEnabled            bool   `json:"profilingEnabled,omitempty"`
+	Distributed                 bool   `json:"distributed,omitempty"`
+	NumberOfGPUs                int32  `json:"numberOfGPUs,omitempty"`
+	NumberOfNodes               int32  `json:"numberOfNodes,omitempty"`
+	MaxLatency                  string `json:"maxLatency,omitempty"`
+	NetworkBandwidthRequirement string `json:"networkBandwidthRequirement,omitempty"`
 }
 
 // CUDAExperimentStatus defines the observed state of CUDAExperiment.
 type CUDAExperimentStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	// executionJobName is the name of the Kubernetes Job created for this experiment.
+	// +optional
+	ExecutionJobName string `json:"executionJobName,omitempty"`
 
 	// conditions represent the current state of the CUDAExperiment resource.
 	// Each condition has a unique type and reflects the status of a specific aspect of the resource.

@@ -71,6 +71,8 @@ In another terminal, create a sample CUDA workload:
 ```bash
 kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
 kubectl get cudaexperiments.gpu.scheduler.io
+kubectl get jobs,pods -l gpu.scheduler.io/experiment=cuda-vector-add
+kubectl logs job/cuda-vector-add-execution
 ```
 
 For a local GPU-enabled Kubernetes lab, see
@@ -87,20 +89,20 @@ metadata:
   name: cuda-vector-add
 spec:
   image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
-  command: ["./vectorAdd"]
+  runtimeClassName: nvidia
   replicas: 1
   gpuRequired: 1
   minimumComputeCapability: "7.0"
   minimumMemory: 4Gi
   priority: normal
   profilingEnabled: true
-  distributed: false
-  numberOfGPUs: 1
-  numberOfNodes: 1
 ```
 
-The operator is responsible for profile lookup, cluster scoring, node-selection
-hints, Volcano submission, and profile updates after execution.
+The current controller creates one Kubernetes Job named
+`<experiment-name>-execution`, sets the NVIDIA GPU limit from `gpuRequired`,
+uses the configured runtime class, and records the Job name in status. The
+longer-term operator roadmap is profile lookup, cluster scoring,
+node-selection hints, Volcano submission, and profile updates after execution.
 
 ## Development
 

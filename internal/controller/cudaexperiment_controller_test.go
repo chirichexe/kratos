@@ -21,6 +21,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,7 +57,15 @@ var _ = Describe("CUDAExperiment Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: gpuv1alpha1.CUDAExperimentSpec{
+						Image:            "nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0",
+						Command:          []string{"./vectorAdd"},
+						Arguments:        []string{"--iterations=1"},
+						Replicas:         1,
+						GPURequired:      1,
+						RuntimeClassName: "nvidia",
+						NumberOfGPUs:     1,
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -70,7 +80,7 @@ var _ = Describe("CUDAExperiment Controller", func() {
 			By("Cleanup the specific resource instance CUDAExperiment")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
-		It("should successfully reconcile the resource", func() {
+		It("should create an execution Job and update the resource status", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &CUDAExperimentReconciler{
 				Client: k8sClient,
@@ -82,11 +92,34 @@ var _ = Describe("CUDAExperiment Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
+			By("Verifying the execution Job")
+			job := &batchv1.Job{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name:      resourceName + executionJobNameSuffix,
+				Namespace: resourceNamespace,
+			}, job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(job.OwnerReferences).To(HaveLen(1))
+			Expect(job.OwnerReferences[0].Name).To(Equal(resourceName))
+			Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
+			Expect(job.Spec.Template.Spec.RuntimeClassName).NotTo(BeNil())
+			Expect(*job.Spec.Template.Spec.RuntimeClassName).To(Equal("nvidia"))
+			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
+			container := job.Spec.Template.Spec.Containers[0]
+			Expect(container.Image).To(Equal("nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0"))
+			Expect(container.Command).To(Equal([]string{"./vectorAdd"}))
+			Expect(container.Args).To(Equal([]string{"--iterations=1"}))
+			gpuLimit := container.Resources.Limits[corev1.ResourceName("nvidia.com/gpu")]
+			Expect(gpuLimit.Value()).To(Equal(int64(1)))
+
+			By("Verifying the CUDAExperiment status")
 			err = k8sClient.Get(ctx, typeNamespacedName, cudaexperiment)
 			Expect(err).NotTo(HaveOccurred())
-			condition := meta.FindStatusCondition(cudaexperiment.Status.Conditions, "Applied")
+			Expect(cudaexperiment.Status.ExecutionJobName).To(Equal(resourceName + executionJobNameSuffix))
+			condition := meta.FindStatusCondition(cudaexperiment.Status.Conditions, executionJobConditionType)
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Reason).To(Equal("Observed"))
+			Expect(condition.Reason).To(Equal("JobCreated"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		})
 	})
 })
