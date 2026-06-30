@@ -121,10 +121,7 @@ func executionJobName(experiment *gpuv1alpha1.CUDAExperiment) string {
 }
 
 func executionJobForExperiment(experiment *gpuv1alpha1.CUDAExperiment) batchv1.Job {
-	parallelism := experiment.Spec.Replicas
-	if parallelism < 1 {
-		parallelism = 1
-	}
+	parallelism := max(experiment.Spec.Replicas, 1)
 
 	gpuCount := experiment.Spec.NumberOfGPUs
 	if gpuCount < 1 {
