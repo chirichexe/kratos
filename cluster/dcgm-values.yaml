@@ -1,0 +1,11 @@
+nodeSelector:
+  accelerator: nvidia
+
+runtimeClassName: nvidia
+
+resources:
+  limits:
+    nvidia.com/gpu: 1
+  requests:
+    cpu: 100m
+    memory: 128Mi

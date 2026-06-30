@@ -16,6 +16,7 @@ runs to score eligible nodes for later executions.
 - [Architecture](architecture/README.md): planned control flow and system
   components.
 - [Operator](operator/README.md): expected `CUDAExperiment` lifecycle.
+- [Observability](observability/README.md): local Prometheus and Grafana stack.
 - [Experiments](experiments/README.md): baselines, workload classes, and
   metrics.
 - [Development Workflow](development/workflow.md): common development commands.

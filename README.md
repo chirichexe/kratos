@@ -126,6 +126,7 @@ make generate
 - [Getting started](docs/getting-started/README.md)
 - [Architecture](docs/architecture/README.md)
 - [Operator lifecycle](docs/operator/README.md)
+- [Observability](docs/observability/README.md)
 - [Experiment notes](docs/experiments/README.md)
 
 ## License
