@@ -1,68 +1,102 @@
 # Operator
 
-`CUDAExperiment` is the user-facing resource. Users describe the container,
-GPU requirements, profiling preference, and optional distributed constraints.
+`CUDAExperiment` is the user-facing resource. Users describe the workload
+container, command, GPU request, runtime class, and whether KRATOS should profile
+before normal execution.
 
-Current minimal lifecycle:
+## Current Reconciliation Flow
 
-1. Read the `CUDAExperiment` spec.
-2. Create a Kubernetes Job named `<experiment-name>-execution`.
-3. Set the Job pod template image, command, arguments, GPU limit, profiling
-   runner, and runtime class from the experiment spec.
-4. Set an owner reference from the Job to the `CUDAExperiment`.
-5. Record the Job name and `ExecutionJobCreated` condition in status.
+When `spec.profilingEnabled` is false:
 
-When `spec.profilingEnabled` is false, the Job contains the original single
-`execution` container that runs the configured image, command, arguments, and
-GPU limit.
+1. ensure `<experiment>-execution` exists;
+2. record `ExecutionJobCreated` in status.
 
-When `spec.profilingEnabled` is true, the Job contains:
+When `spec.profilingEnabled` is true:
 
-- `stage-workload`: an initContainer using the experiment image. It copies the
-  CUDA executable into a shared `emptyDir` volume and then exits.
-- `profiling-runner`: the controller-owned Nsight Compute container. It requests
-  `nvidia.com/gpu`, runs `nvidia-smi`, runs `ncu --version`, launches the staged
-  workload once under `ncu --set basic`, imports the `.ncu-rep`, and prints raw
-  metrics to its logs.
+1. check for `WorkloadProfile` named `<experiment>-profile`;
+2. if the profile is missing, ensure `<experiment>-profiling` exists;
+3. when the profiling Job completes, read
+   `<experiment>-profile-summary` ConfigMap;
+4. create/update `<experiment>-profile` and write parsed metrics into
+   `WorkloadProfile.status`;
+5. on a later reconcile, observe the profile and ensure
+   `<experiment>-execution` exists.
 
-The profiling runner image defaults to `kratos-nsight-compute-poc:latest`.
-Override it by setting `KRATOS_NSIGHT_COMPUTE_IMAGE` on the controller manager.
-The image provides `/scripts/profile.sh`, so the controller only passes the
-staged workload path, report path, and workload arguments.
+The profiling and execution Jobs are mutually exclusive until a profile exists.
 
-For custom workload images, set `spec.command[0]` to the CUDA executable path
-inside the workload image. If no command is provided, the controller defaults to
-`/cuda-samples/vectorAdd`, which supports the NVIDIA test container
-`nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0`.
+## Profiling Job
 
-Inspect profiling output with:
+The profiling Job keeps the workload image independent from Nsight Compute:
 
-```bash
-kubectl logs job/<experiment-name>-execution -c profiling-runner
+- `stage-workload` initContainer uses `spec.image`, verifies
+  `spec.command[0]`, copies the CUDA executable into a shared `emptyDir`, and
+  exits.
+- `profiling-runner` uses `kratos-nsight-compute-poc:latest` by default,
+  requests `nvidia.com/gpu`, launches the staged executable under
+  `ncu --set basic`, imports raw metrics, parses a summary, and publishes a
+  ConfigMap.
+
+The runner image can be overridden with `KRATOS_NSIGHT_COMPUTE_IMAGE` on the
+controller manager.
+
+For the NVIDIA sample container use:
+
+```yaml
+spec:
+  image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
+  command:
+    - /cuda-samples/vectorAdd
+  runtimeClassName: nvidia
+  gpuRequired: 1
+  replicas: 1
+  profilingEnabled: true
 ```
 
-The local GPU Kind setup requires `runtimeClassName: nvidia` so CUDA pods are
-started through the NVIDIA runtime handler. The CRD defaults this field to
-`nvidia`, and users can override it when running on clusters with a different
-runtime class name.
+## Outputs
 
-The controller keeps the `CUDAExperiment` and completed Job after execution so
-users can inspect status, events, and logs. To rerun the same experiment name,
-delete the generated Job or create a new `CUDAExperiment` with a different
-name.
+Profiling writes:
 
-Expected long-term lifecycle:
+- Job: `<experiment>-profiling`
+- ConfigMap: `<experiment>-profile-summary`
+- WorkloadProfile: `<experiment>-profile`
 
-1. Read the `CUDAExperiment` spec.
-2. Compute or read the workload hash.
-3. Look up a matching profile in the knowledge base.
-4. Collect static GPU data and runtime node metrics.
-5. Filter nodes that do not satisfy hard constraints.
-6. Score the remaining nodes.
-7. Generate `NodeAffinity` and `NodeSelector` hints.
-8. Submit the workload to Volcano for final scheduling.
-9. Profile completed workloads and update the profile.
+Example `WorkloadProfile.status` from a real Nsight run:
 
-The reconciler should coordinate this flow while reusable decisions stay in
-`pkg/catalog`, `pkg/profiling`, `pkg/scheduling`, `pkg/volcano`,
-`pkg/workflow`, and `pkg/telemetry`.
+```yaml
+status:
+  boundType: unknown
+  metrics:
+    achievedOccupancy: "78.21"
+    l2Throughput: "30.22"
+    smThroughput: "12.56"
+```
+
+Inspect:
+
+```bash
+kubectl logs job/<experiment>-profiling
+kubectl get configmap <experiment>-profile-summary -o yaml
+kubectl get workloadprofile <experiment>-profile -o yaml
+kubectl get cudaexperiment <experiment> -o yaml
+```
+
+## Current Caveat
+
+The controller watches `CUDAExperiment` and owned Jobs. It does not yet watch
+owned `WorkloadProfile` resources. After the controller creates a profile,
+another reconcile is needed before the execution Job is created. For manual
+validation:
+
+```bash
+kubectl annotate cudaexperiment <experiment> \
+  validation.gpu.scheduler.io/reconcile-at=manual --overwrite
+```
+
+The next controller step should add a `WorkloadProfile` watch or explicitly
+requeue after successful profile creation.
+
+## Longer-Term Direction
+
+The current controller only validates the profiling pipeline. Future scheduling
+work should use workload profiles, GPU telemetry, node constraints, and Volcano
+integration to produce placement hints before execution.

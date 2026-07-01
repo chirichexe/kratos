@@ -25,189 +25,434 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	gpuv1alpha1 "github.com/chirichexe/kratos/api/v1alpha1"
 )
 
+const (
+	jobCompleteReason           = "Completed"
+	jobCompletionsReachedReason = "CompletionsReached"
+	resourceNamespace           = "default"
+)
+
 var _ = Describe("CUDAExperiment Controller", func() {
-	Context("When reconciling a resource", func() {
-		const (
-			resourceName      = "test-resource"
-			resourceNamespace = "default"
-			vectorAddArgument = "--iterations=1"
-		)
+	ctx := context.Background()
 
-		ctx := context.Background()
+	It("creates only an ExecutionJob when profiling is disabled and remains idempotent", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-no-profile", false)
+		reconciler := cudaExperimentReconciler()
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: resourceNamespace,
-		}
-		cudaexperiment := &gpuv1alpha1.CUDAExperiment{}
+		reconcileExperiment(ctx, reconciler, experiment)
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind CUDAExperiment")
-			err := k8sClient.Get(ctx, typeNamespacedName, cudaexperiment)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &gpuv1alpha1.CUDAExperiment{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: resourceNamespace,
-					},
-					Spec: gpuv1alpha1.CUDAExperimentSpec{
-						Image:            "nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0",
-						Command:          []string{defaultWorkloadExecutable},
-						Arguments:        []string{vectorAddArgument},
-						Replicas:         1,
-						GPURequired:      1,
-						RuntimeClassName: "nvidia",
-						NumberOfGPUs:     1,
-						ProfilingEnabled: true,
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
+		expectJobExists(ctx, executionJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, profilingJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectCondition(ctx, experiment, executionJobConditionType, "JobCreated")
+		expectOneCondition(ctx, experiment, executionJobConditionType)
+	})
+
+	It("creates only a ProfilingJob when profiling is enabled and the WorkloadProfile is missing", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-profile-missing", true)
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, profilingJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectCondition(ctx, experiment, profilingPendingConditionType, "WaitingForProfile")
+		expectCondition(ctx, experiment, profilingRunningConditionType, "ProfilingJobRunning")
+		expectOneCondition(ctx, experiment, profilingPendingConditionType)
+		expectOneCondition(ctx, experiment, profilingRunningConditionType)
+	})
+
+	It("creates only an ExecutionJob when profiling is enabled and the WorkloadProfile exists", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-profile-ready", true)
+		createWorkloadProfile(ctx, experiment)
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, executionJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, profilingJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectCondition(ctx, experiment, executionJobConditionType, "JobCreated")
+		expectOneCondition(ctx, experiment, executionJobConditionType)
+	})
+
+	It("does not create an ExecutionJob while an existing ProfilingJob is still running", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-profile-running", true)
+		reconciler := cudaExperimentReconciler()
+		createProfilingJob(ctx, reconciler, experiment, nil)
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, profilingJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectCondition(ctx, experiment, profilingRunningConditionType, "ProfilingJobRunning")
+		expectOneCondition(ctx, experiment, profilingRunningConditionType)
+	})
+
+	It("does not create an ExecutionJob when the ProfilingJob completed before profile generation exists", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-profile-summary-missing", true)
+		reconciler := cudaExperimentReconciler()
+		createProfilingJob(ctx, reconciler, experiment, []batchv1.JobCondition{
+			{
+				Type:   batchv1.JobSuccessCriteriaMet,
+				Status: corev1.ConditionTrue,
+				Reason: jobCompletionsReachedReason,
+			},
+			{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+				Reason: jobCompleteReason,
+			},
 		})
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &gpuv1alpha1.CUDAExperiment{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+		reconcileExperiment(ctx, reconciler, experiment)
 
-			By("Cleanup the specific resource instance CUDAExperiment")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		expectJobExists(ctx, profilingJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectWorkloadProfileNotFound(ctx, experiment)
+		expectCondition(ctx, experiment, failedConditionType, "ProfileSummaryMissing")
+		expectOneCondition(ctx, experiment, failedConditionType)
+	})
+
+	It("creates a WorkloadProfile from a completed ProfilingJob summary before starting execution", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-profile-summary-valid", true)
+		reconciler := cudaExperimentReconciler()
+		createProfilingJob(ctx, reconciler, experiment, []batchv1.JobCondition{
+			{
+				Type:   batchv1.JobSuccessCriteriaMet,
+				Status: corev1.ConditionTrue,
+				Reason: jobCompletionsReachedReason,
+			},
+			{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+				Reason: jobCompleteReason,
+			},
 		})
-		It("should create an execution Job and update the resource status", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &CUDAExperimentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+		createProfileSummaryConfigMap(ctx, experiment, `{
+			"boundType": "memory-bound",
+			"metrics": {
+				"smThroughput": "35.2",
+				"dramThroughput": "91.4",
+				"achievedOccupancy": "0.55"
 			}
+		}`)
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
+		reconcileExperimentOnce(ctx, reconciler, experiment)
 
-			By("Verifying the execution Job")
-			job := &batchv1.Job{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      resourceName + executionJobNameSuffix,
-				Namespace: resourceNamespace,
-			}, job)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(job.OwnerReferences).To(HaveLen(1))
-			Expect(job.OwnerReferences[0].Name).To(Equal(resourceName))
-			Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
-			Expect(job.Spec.Template.Spec.RuntimeClassName).NotTo(BeNil())
-			Expect(*job.Spec.Template.Spec.RuntimeClassName).To(Equal("nvidia"))
-			Expect(job.Spec.Template.Spec.Volumes).To(HaveLen(1))
-			Expect(job.Spec.Template.Spec.Volumes[0].Name).To(Equal(sharedWorkloadVolumeName))
-			Expect(job.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
+		expectJobExists(ctx, profilingJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectWorkloadProfile(ctx, experiment, gpuv1alpha1.WorkloadBoundMemory, map[string]string{
+			"smThroughput":      "35.2",
+			"dramThroughput":    "91.4",
+			"achievedOccupancy": "0.55",
+		})
+		expectOneWorkloadProfileForExperiment(ctx, experiment.Name)
+		expectCondition(ctx, experiment, profilingCompletedConditionType, "ProfilingJobCompleted")
+		expectOneCondition(ctx, experiment, profilingCompletedConditionType)
 
-			staging := job.Spec.Template.Spec.InitContainers[0]
-			Expect(staging.Name).To(Equal("stage-workload"))
-			Expect(staging.Image).To(Equal("nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0"))
-			Expect(staging.Command).To(Equal([]string{"/bin/sh", "-c", workloadStagingScript(defaultWorkloadExecutable)}))
-			Expect(staging.VolumeMounts).To(ContainElement(corev1.VolumeMount{
-				Name:      sharedWorkloadVolumeName,
-				MountPath: sharedWorkloadMountPath,
-			}))
-			Expect(staging.Resources.Limits).NotTo(HaveKey(corev1.ResourceName("nvidia.com/gpu")))
+		reconcileExperiment(ctx, reconciler, experiment)
 
-			runner := job.Spec.Template.Spec.Containers[0]
-			expectedExperiment := &gpuv1alpha1.CUDAExperiment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: gpuv1alpha1.CUDAExperimentSpec{
-					Arguments: []string{vectorAddArgument},
-				},
-			}
-			Expect(runner.Name).To(Equal("profiling-runner"))
-			Expect(runner.Image).To(Equal(defaultNsightComputeImage))
-			Expect(runner.ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
-			Expect(runner.Command).To(Equal([]string{"/scripts/profile.sh", sharedWorkloadMountPath + "/workload", profilingReportPath(expectedExperiment)}))
-			Expect(runner.Args).To(Equal([]string{vectorAddArgument}))
-			Expect(runner.SecurityContext).NotTo(BeNil())
-			Expect(runner.SecurityContext.Capabilities).NotTo(BeNil())
-			Expect(runner.SecurityContext.Capabilities.Add).To(ContainElement(corev1.Capability("SYS_ADMIN")))
-			Expect(runner.VolumeMounts).To(ContainElement(corev1.VolumeMount{
-				Name:      sharedWorkloadVolumeName,
-				MountPath: sharedWorkloadMountPath,
-			}))
-			gpuLimit := runner.Resources.Limits[corev1.ResourceName("nvidia.com/gpu")]
-			Expect(gpuLimit.Value()).To(Equal(int64(1)))
+		expectOneWorkloadProfileForExperiment(ctx, experiment.Name)
+		expectJobExists(ctx, executionJobName(experiment), experiment.Name)
+		expectCondition(ctx, experiment, executionJobConditionType, "JobCreated")
+	})
 
-			By("Verifying the CUDAExperiment status")
-			err = k8sClient.Get(ctx, typeNamespacedName, cudaexperiment)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cudaexperiment.Status.ExecutionJobName).To(Equal(resourceName + executionJobNameSuffix))
-			condition := meta.FindStatusCondition(cudaexperiment.Status.Conditions, executionJobConditionType)
-			Expect(condition).NotTo(BeNil())
-			Expect(condition.Reason).To(Equal("JobCreated"))
-			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+	It("does not create a WorkloadProfile or ExecutionJob from invalid profile summary JSON", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-profile-summary-invalid", true)
+		reconciler := cudaExperimentReconciler()
+		createProfilingJob(ctx, reconciler, experiment, []batchv1.JobCondition{
+			{
+				Type:   batchv1.JobSuccessCriteriaMet,
+				Status: corev1.ConditionTrue,
+				Reason: jobCompletionsReachedReason,
+			},
+			{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+				Reason: jobCompleteReason,
+			},
+		})
+		createProfileSummaryConfigMap(ctx, experiment, `{"boundType": "io-bound", "metrics": {"smThroughput": "35.2"}}`)
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, profilingJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectWorkloadProfileNotFound(ctx, experiment)
+		expectCondition(ctx, experiment, failedConditionType, "InvalidProfileSummary")
+		expectOneCondition(ctx, experiment, failedConditionType)
+	})
+
+	It("does not create an ExecutionJob when the ProfilingJob failed", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-profile-failed", true)
+		reconciler := cudaExperimentReconciler()
+		createProfilingJob(ctx, reconciler, experiment, []batchv1.JobCondition{
+			{
+				Type:   batchv1.JobFailureTarget,
+				Status: corev1.ConditionTrue,
+				Reason: "BackoffLimitExceeded",
+			},
+			{
+				Type:   batchv1.JobFailed,
+				Status: corev1.ConditionTrue,
+				Reason: "BackoffLimitExceeded",
+			},
 		})
 
-		It("should keep the original single-container Job when profiling is disabled", func() {
-			const disabledResourceName = "test-resource-no-profile"
-			disabledNamespacedName := types.NamespacedName{
-				Name:      disabledResourceName,
-				Namespace: resourceNamespace,
-			}
-			resource := &gpuv1alpha1.CUDAExperiment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      disabledResourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: gpuv1alpha1.CUDAExperimentSpec{
-					Image:            "nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0",
-					Command:          []string{defaultWorkloadExecutable},
-					Arguments:        []string{vectorAddArgument},
-					Replicas:         1,
-					GPURequired:      1,
-					RuntimeClassName: "nvidia",
-					ProfilingEnabled: false,
-				},
-			}
-			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			defer func() {
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			}()
+		reconcileExperiment(ctx, reconciler, experiment)
 
-			controllerReconciler := &CUDAExperimentReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: disabledNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			job := &batchv1.Job{}
-			err = k8sClient.Get(ctx, types.NamespacedName{
-				Name:      disabledResourceName + executionJobNameSuffix,
-				Namespace: resourceNamespace,
-			}, job)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(job.Spec.Template.Spec.Volumes).To(BeEmpty())
-			Expect(job.Spec.Template.Spec.InitContainers).To(BeEmpty())
-			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
-			container := job.Spec.Template.Spec.Containers[0]
-			Expect(container.Name).To(Equal("execution"))
-			Expect(container.Image).To(Equal("nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0"))
-			Expect(container.Command).To(Equal([]string{defaultWorkloadExecutable}))
-			Expect(container.Args).To(Equal([]string{vectorAddArgument}))
-			gpuLimit := container.Resources.Limits[corev1.ResourceName("nvidia.com/gpu")]
-			Expect(gpuLimit.Value()).To(Equal(int64(1)))
-		})
+		expectJobExists(ctx, profilingJobName(experiment), experiment.Name)
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectOneJobForExperiment(ctx, experiment.Name)
+		expectCondition(ctx, experiment, failedConditionType, "ProfilingJobFailed")
+		expectOneCondition(ctx, experiment, failedConditionType)
 	})
 })
+
+func cudaExperimentReconciler() *CUDAExperimentReconciler {
+	return &CUDAExperimentReconciler{
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
+	}
+}
+
+func createCUDAExperiment(ctx context.Context, name string, profilingEnabled bool) *gpuv1alpha1.CUDAExperiment {
+	experiment := &gpuv1alpha1.CUDAExperiment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: resourceNamespace,
+		},
+		Spec: gpuv1alpha1.CUDAExperimentSpec{
+			Image:            testCUDAImage,
+			Command:          []string{defaultWorkloadExecutable},
+			Arguments:        []string{"--iterations=1"},
+			Replicas:         1,
+			GPURequired:      1,
+			RuntimeClassName: defaultRuntimeClassName,
+			NumberOfGPUs:     1,
+			ProfilingEnabled: profilingEnabled,
+		},
+	}
+
+	Expect(k8sClient.Create(ctx, experiment)).To(Succeed())
+	DeferCleanup(func() {
+		err := k8sClient.Delete(ctx, experiment)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+
+	return experiment
+}
+
+func createWorkloadProfile(ctx context.Context, experiment *gpuv1alpha1.CUDAExperiment) {
+	profile := &gpuv1alpha1.WorkloadProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      workloadProfileName(experiment),
+			Namespace: experiment.Namespace,
+		},
+		Spec: gpuv1alpha1.WorkloadProfileSpec{
+			WorkloadImage:        experiment.Spec.Image,
+			Command:              experiment.Spec.Command,
+			Arguments:            experiment.Spec.Arguments,
+			SourceCUDAExperiment: experiment.Name,
+		},
+	}
+
+	Expect(k8sClient.Create(ctx, profile)).To(Succeed())
+	DeferCleanup(func() {
+		err := k8sClient.Delete(ctx, profile)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+}
+
+func createProfilingJob(
+	ctx context.Context,
+	reconciler *CUDAExperimentReconciler,
+	experiment *gpuv1alpha1.CUDAExperiment,
+	conditions []batchv1.JobCondition,
+) {
+	job := reconciler.profilingJobForExperiment(experiment)
+	Expect(ctrl.SetControllerReference(experiment, &job, reconciler.Scheme)).To(Succeed())
+	Expect(k8sClient.Create(ctx, &job)).To(Succeed())
+	DeferCleanup(func() {
+		err := k8sClient.Delete(ctx, &job)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+
+	if len(conditions) == 0 {
+		return
+	}
+
+	current := &batchv1.Job{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, current)).To(Succeed())
+	now := metav1.Now()
+	current.Status.StartTime = &now
+	if hasJobCondition(conditions, batchv1.JobComplete) {
+		current.Status.CompletionTime = &now
+	}
+	for i := range conditions {
+		conditions[i].LastTransitionTime = now
+	}
+	current.Status.Conditions = conditions
+	Expect(k8sClient.Status().Update(ctx, current)).To(Succeed())
+}
+
+func createProfileSummaryConfigMap(ctx context.Context, experiment *gpuv1alpha1.CUDAExperiment, summary string) {
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      profileSummaryConfigMapName(experiment),
+			Namespace: experiment.Namespace,
+		},
+		Data: map[string]string{
+			profileSummaryConfigMapKey: summary,
+		},
+	}
+
+	Expect(k8sClient.Create(ctx, configMap)).To(Succeed())
+	DeferCleanup(func() {
+		err := k8sClient.Delete(ctx, configMap)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+}
+
+func hasJobCondition(conditions []batchv1.JobCondition, conditionType batchv1.JobConditionType) bool {
+	for _, condition := range conditions {
+		if condition.Type == conditionType && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+func reconcileExperimentOnce(
+	ctx context.Context,
+	reconciler *CUDAExperimentReconciler,
+	experiment *gpuv1alpha1.CUDAExperiment,
+) {
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      experiment.Name,
+			Namespace: experiment.Namespace,
+		},
+	}
+	_, err := reconciler.Reconcile(ctx, request)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func reconcileExperiment(
+	ctx context.Context,
+	reconciler *CUDAExperimentReconciler,
+	experiment *gpuv1alpha1.CUDAExperiment,
+) {
+	for range 3 {
+		reconcileExperimentOnce(ctx, reconciler, experiment)
+	}
+}
+
+func expectJobExists(ctx context.Context, name, experimentName string) {
+	job := &batchv1.Job{}
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: resourceNamespace}, job)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(job.OwnerReferences).To(HaveLen(1))
+	Expect(job.OwnerReferences[0].Name).To(Equal(experimentName))
+}
+
+func expectJobNotFound(ctx context.Context, name string) {
+	job := &batchv1.Job{}
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: resourceNamespace}, job)
+	Expect(errors.IsNotFound(err)).To(BeTrue())
+}
+
+func expectOneJobForExperiment(ctx context.Context, experimentName string) {
+	jobs := &batchv1.JobList{}
+	Expect(k8sClient.List(
+		ctx,
+		jobs,
+		client.InNamespace(resourceNamespace),
+		client.MatchingLabels{"gpu.scheduler.io/experiment": experimentName},
+	)).To(Succeed())
+	Expect(jobs.Items).To(HaveLen(1))
+}
+
+func expectWorkloadProfile(
+	ctx context.Context,
+	experiment *gpuv1alpha1.CUDAExperiment,
+	boundType gpuv1alpha1.WorkloadBoundType,
+	metrics map[string]string,
+) {
+	profile := &gpuv1alpha1.WorkloadProfile{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{
+		Name:      workloadProfileName(experiment),
+		Namespace: experiment.Namespace,
+	}, profile)).To(Succeed())
+	Expect(profile.OwnerReferences).To(HaveLen(1))
+	Expect(profile.OwnerReferences[0].Name).To(Equal(experiment.Name))
+	Expect(profile.Spec.WorkloadImage).To(Equal(experiment.Spec.Image))
+	Expect(profile.Spec.Command).To(Equal(experiment.Spec.Command))
+	Expect(profile.Spec.Arguments).To(Equal(experiment.Spec.Arguments))
+	Expect(profile.Spec.SourceCUDAExperiment).To(Equal(experiment.Name))
+	Expect(profile.Status.BoundType).To(Equal(boundType))
+	Expect(profile.Status.Metrics).To(Equal(metrics))
+}
+
+func expectWorkloadProfileNotFound(ctx context.Context, experiment *gpuv1alpha1.CUDAExperiment) {
+	profile := &gpuv1alpha1.WorkloadProfile{}
+	err := k8sClient.Get(ctx, types.NamespacedName{
+		Name:      workloadProfileName(experiment),
+		Namespace: experiment.Namespace,
+	}, profile)
+	Expect(errors.IsNotFound(err)).To(BeTrue())
+}
+
+func expectOneWorkloadProfileForExperiment(ctx context.Context, experimentName string) {
+	profiles := &gpuv1alpha1.WorkloadProfileList{}
+	Expect(k8sClient.List(
+		ctx,
+		profiles,
+		client.InNamespace(resourceNamespace),
+	)).To(Succeed())
+
+	count := 0
+	for _, profile := range profiles.Items {
+		if profile.Spec.SourceCUDAExperiment == experimentName {
+			count++
+		}
+	}
+	Expect(count).To(Equal(1))
+}
+
+func expectCondition(ctx context.Context, experiment *gpuv1alpha1.CUDAExperiment, conditionType, reason string) {
+	current := &gpuv1alpha1.CUDAExperiment{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: experiment.Name, Namespace: experiment.Namespace}, current)).To(Succeed())
+
+	condition := meta.FindStatusCondition(current.Status.Conditions, conditionType)
+	Expect(condition).NotTo(BeNil())
+	Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+	Expect(condition.Reason).To(Equal(reason))
+}
+
+func expectOneCondition(ctx context.Context, experiment *gpuv1alpha1.CUDAExperiment, conditionType string) {
+	current := &gpuv1alpha1.CUDAExperiment{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: experiment.Name, Namespace: experiment.Namespace}, current)).To(Succeed())
+
+	count := 0
+	for _, condition := range current.Status.Conditions {
+		if condition.Type == conditionType {
+			count++
+		}
+	}
+	Expect(count).To(Equal(1))
+}

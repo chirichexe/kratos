@@ -1,0 +1,15 @@
+apiVersion: gpu.scheduler.io/v1alpha1
+kind: WorkloadProfile
+metadata:
+  labels:
+    app.kubernetes.io/name: kratos
+    app.kubernetes.io/managed-by: kustomize
+  name: workloadprofile-sample
+spec:
+  workloadImage: nvidia/cuda:12.4.1-base-ubuntu22.04
+  command:
+  - /bin/bash
+  arguments:
+  - -c
+  - nvidia-smi
+  sourceCudaExperiment: cudaexperiment-sample

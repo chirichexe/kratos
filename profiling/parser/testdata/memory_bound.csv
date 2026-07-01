@@ -1,0 +1,6 @@
+Metric Name,Metric Value
+SM Throughput,42.0 %
+DRAM Throughput,84.5 %
+L2 Throughput,76.0 %
+Achieved Occupancy,0.52
+Memory Stall %,37.0 %

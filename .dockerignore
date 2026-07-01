@@ -3,9 +3,28 @@
 **
 
 # Re-include Go source files (but not *_test.go)
+!cmd/
+!cmd/**
+!api/
+!api/**
+!internal/
+!internal/**
 !**/*.go
 **/*_test.go
 
 # Re-include Go module files
 !go.mod
 !go.sum
+
+# Re-include Nsight Compute profiling runner assets
+!profiling/
+!profiling/parser/
+!profiling/parser/parse_ncu.py
+!test/
+!test/nsight-compute-poc/
+!test/nsight-compute-poc/Dockerfile
+!test/nsight-compute-poc/Dockerfile.offline
+!test/nsight-compute-poc/*.deb
+!test/nsight-compute-poc/profile.sh
+!test/nsight-compute-poc/run-profile.sh
+!test/nsight-compute-poc/vectoradd.cu

@@ -1,26 +1,32 @@
-# Nsight Compute Kubernetes PoC
+# Nsight Compute Profiling PoC
 
-The current Nsight Compute work is a feasibility proof, not controller
-automation. The runnable artifacts live in `test/nsight-compute-poc`.
+This PoC validates the current profiling pipeline end to end:
 
-## What It Demonstrates
+1. a `CUDAExperiment` with `spec.profilingEnabled: true` creates a profiling
+   Job;
+2. the profiling Job stages the workload executable from the workload image;
+3. the profiling runner launches that executable under Nsight Compute;
+4. the runner publishes a profile summary ConfigMap;
+5. the controller creates a `WorkloadProfile` and writes parsed metrics into
+   `status`;
+6. a later reconcile observes the profile and creates the execution Job.
 
-The PoC launches a Kubernetes `Job` that:
+The parser and classification are still intentionally small. The important PoC
+signal is that the metrics come from a real `ncu` run, not from synthetic data.
 
-1. requests one GPU with `nvidia.com/gpu: 1`;
-2. uses `runtimeClassName: nvidia` for the local `nvkind` GPU lab;
-3. runs `nvidia-smi`;
-4. runs `ncu --version`;
-5. profiles a small CUDA `vectorAdd` kernel with `ncu`;
-6. writes an Nsight Compute report at
-   `/tmp/nsight-compute/vectoradd.ncu-rep`.
+## Images
 
-This deliberately ignores `CUDAExperiment`, automatic controller logic, Python
-parsing, and workload classification.
+Build the controller:
 
-## Runbook
+```bash
+make docker-build IMG=kratos-controller:profiling-poc
+kind load docker-image kratos-controller:profiling-poc --name kratos-gpu
+make deploy IMG=kratos-controller:profiling-poc
+kubectl rollout restart -n kratos-system deployment/kratos-controller-manager
+kubectl rollout status -n kratos-system deployment/kratos-controller-manager
+```
 
-Build and load the image:
+Build the profiling runner:
 
 ```bash
 cd test/nsight-compute-poc
@@ -28,135 +34,99 @@ make build
 make load CLUSTER=kratos-gpu
 ```
 
-Run the Kubernetes job:
+`make build` uses `Dockerfile.runtime`, based on
+`nvidia/cuda:12.4.1-base-ubuntu22.04`, and installs only the runtime pieces
+needed by the PoC: Nsight Compute CLI, Python, `kubectl`, the parser, and
+`/scripts/profile.sh`.
+
+## Test Experiment
+
+Apply the CRDs/RBAC if they are not already deployed:
 
 ```bash
-make apply
-kubectl wait --for=condition=complete job/nsight-compute-vectoradd --timeout=180s
-make logs
+kubectl apply -f config/crd/bases/gpu.scheduler.io_workloadprofiles.yaml
+kubectl apply -f config/rbac/profiling_runner_configmap_role.yaml
+kubectl apply -f config/rbac/profiling_runner_configmap_role_binding.yaml
 ```
 
-The logs should include `nvidia-smi`, `ncu --version`, `Validation passed`, and
-Nsight Compute metric output for the `vectorAdd` kernel.
+Create or reapply a profiling experiment:
 
-Run the profiling runner variant:
-
-```bash
-make clean-runner
-make apply-runner
-kubectl wait --for=condition=complete job/nsight-compute-vectoradd-runner --timeout=240s
-make logs-runner
-```
-
-In this variant, the workload image does not include Nsight Compute. It stages
-the CUDA executable into a shared `emptyDir` through an initContainer, while the
-`profiling-runner` container owns `ncu`, requests the GPU, launches the staged
-executable once under `ncu`, imports the generated report, and prints raw
-metrics in its logs.
-
-Run the explicit NVIDIA sample workload profiling runner example:
-
-```bash
-make clean-nvidia-sample-runner
-make apply-nvidia-sample-runner
-kubectl wait --for=condition=complete job/nsight-compute-nvidia-sample-runner --timeout=240s
-make logs-nvidia-sample-runner
-```
-
-This version uses `nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0` as the
-workload container and `kratos-nsight-compute-poc:latest` as the `ncu` profiling
-runner.
-
-For full details, including image build arguments and troubleshooting, see
-`test/nsight-compute-poc/README.md`.
-
-## Expected Cluster Requirements
-
-- NVIDIA host driver compatible with the selected CUDA image.
-- Docker configured with the NVIDIA Container Toolkit.
-- A GPU-capable Kubernetes cluster, such as the local `nvkind` lab in
-  `docs/getting-started/kind-gpu.md`.
-- NVIDIA device plugin advertising `nvidia.com/gpu`.
-- Permission for Nsight Compute to access GPU performance counters.
-
-## Known Operational Caveats
-
-Nsight Compute may fail with a profiling-counter permission error unless the pod
-has `SYS_ADMIN` capability or the host driver allows non-admin profiling
-counters. This PoC adds `SYS_ADMIN` to the container manifest to validate
-feasibility. A production implementation should replace that with a deliberate
-cluster policy.
-
-If the job remains pending, verify that the NVIDIA device plugin advertises
-allocatable GPUs. If the pod cannot start with `runtimeClassName: nvidia`, verify
-the local runtime class or remove that field on clusters that expose GPUs
-without a runtime class.
-
-## Validation Result
-
-The PoC was validated on the local `kratos-gpu` Kind cluster. The worker node
-advertised three logical GPU slots through `nvidia.com/gpu`, the Job requested
-one GPU, and the pod completed successfully.
-
-The successful run showed:
-
-- `nvidia-smi` inside the pod with driver `610.43.02` and CUDA UMD `13.3`;
-- `ncu --version` reporting Nsight Compute `2024.1.1`;
-- NVIDIA `vectorAdd` sample output ending in `Test PASSED`;
-- Nsight Compute profiling `vectorAdd` in 8 passes;
-- raw imported metrics including `sm__throughput`, `lts__throughput`,
-  `sm__cycles_active`, and `profiler__replayer_passes`;
-- `/tmp/nsight-compute/vectoradd.ncu-rep` generated in the pod.
-
-The main issues encountered were large CUDA image pulls stalling, in-cluster
-download timeout for the 594 MB Nsight Compute package, and an invalid initial
-`--set speedOfLight` option. The working path uses `Dockerfile.offline`, a
-host-downloaded Nsight Compute `.deb`, `--set basic`, and an explicit
-`ncu --import --page raw` step so metrics are visible in Kubernetes logs.
-
-The profiling runner variant keeps `ncu` independent from the workload image,
-but the runner still launches the staged workload executable. Nsight Compute
-does not profile an arbitrary already-running CUDA process in another container
-unless that process was launched for Nsight Compute attach mode.
-
-## Controller Integration
-
-The controller now creates the Nsight Compute profiling runner automatically
-when a `CUDAExperiment` has `spec.profilingEnabled: true`.
-
-The generated Job keeps the workload image independent from `ncu`:
-
-- `stage-workload` uses `spec.image`, stages the CUDA executable into a shared
-  `emptyDir`, and exits.
-- `profiling-runner` uses `kratos-nsight-compute-poc:latest` by default,
-  requests the GPU, launches the staged executable once under `ncu`, imports the
-  report, and logs raw metrics.
-
-Override the profiler image by setting `KRATOS_NSIGHT_COMPUTE_IMAGE` on the
-controller manager. For custom workload images, set `spec.command[0]` to the
-CUDA executable path. If `spec.command` is omitted, the controller uses
-`/cuda-samples/vectorAdd` for the NVIDIA sample container.
-
-Verified controller-created Job:
-
-```bash
-kubectl apply -f - <<'EOF'
+```yaml
 apiVersion: gpu.scheduler.io/v1alpha1
 kind: CUDAExperiment
 metadata:
-  name: controller-runner-vectoradd
+  name: cuda-vector-add-validation
+  namespace: default
 spec:
   image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
+  command:
+    - /cuda-samples/vectorAdd
   runtimeClassName: nvidia
   replicas: 1
   gpuRequired: 1
   profilingEnabled: true
-EOF
-
-kubectl logs job/controller-runner-vectoradd-execution -c profiling-runner
 ```
 
-The profiling runner logs included `ncu --version`, `Test PASSED`,
-`Profiling "vectorAdd" ... - 8 passes`, `sm__throughput`, `lts__throughput`,
-`profiler__replayer_passes`, and
-`/shared/nsight-compute/controller-runner-vectoradd.ncu-rep`.
+For a clean rerun:
+
+```bash
+kubectl delete workloadprofile cuda-vector-add-validation-profile --ignore-not-found
+kubectl delete configmap cuda-vector-add-validation-profile-summary --ignore-not-found
+kubectl delete job cuda-vector-add-validation-profiling --ignore-not-found
+kubectl delete job cuda-vector-add-validation-execution --ignore-not-found
+kubectl apply -f tmp/cudaexperiment-profiling-validation.yaml
+```
+
+Check the pipeline:
+
+```bash
+kubectl get jobs
+kubectl get pods
+kubectl logs job/cuda-vector-add-validation-profiling
+kubectl get configmap cuda-vector-add-validation-profile-summary -o yaml
+kubectl get workloadprofile cuda-vector-add-validation-profile -o yaml
+kubectl get cudaexperiment cuda-vector-add-validation -o yaml
+```
+
+Expected markers:
+
+- profiling Job reaches `Complete`;
+- logs include `ncu --version`, `Profiling "vectorAdd"`, and `Test PASSED`;
+- logs include real raw metrics such as `sm__throughput` and
+  `lts__throughput`;
+- ConfigMap `<experiment>-profile-summary` contains `summary.json`;
+- `WorkloadProfile.status.boundType` and `WorkloadProfile.status.metrics` are
+  populated.
+
+Example result from the local `kratos-gpu` cluster:
+
+```yaml
+status:
+  boundType: unknown
+  metrics:
+    achievedOccupancy: "78.21"
+    l2Throughput: "30.22"
+    smThroughput: "12.56"
+```
+
+`unknown` is acceptable for the NVIDIA `vectorAdd` sample with the current
+thresholds. The PoC goal is real metric capture and controller propagation.
+
+## Current Caveats
+
+- The controller currently watches `CUDAExperiment` and owned Jobs. It does not
+  watch `WorkloadProfile` yet, so after a profile is created a later reconcile
+  is needed to create the execution Job. For manual validation:
+
+  ```bash
+  kubectl annotate cudaexperiment cuda-vector-add-validation \
+    validation.gpu.scheduler.io/reconcile-at=manual --overwrite
+  ```
+
+- The runner needs GPU performance counter access. The PoC grants `SYS_ADMIN`
+  to the profiling container. A production setup should replace that with an
+  explicit cluster security policy.
+- The Nsight package is large, around 594 MB. Keep the built image loaded in
+  kind during validation.
+- `ncu --set basic` is used because it works with Nsight Compute 2024.1.1 and
+  collects enough metrics for this phase.

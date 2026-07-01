@@ -27,3 +27,7 @@ Thumbs.db
 
 # Local helper scripts
 hack/cleanup-kind-gpu-lab.local.sh
+
+# Python bytecode
+__pycache__/
+*.pyc

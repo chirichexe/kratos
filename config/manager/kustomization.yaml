@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: kratos-controller
-  newTag: v0.1.0
+  newTag: profiling-poc

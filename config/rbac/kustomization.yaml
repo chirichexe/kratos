@@ -7,6 +7,8 @@ resources:
 - service_account.yaml
 - role.yaml
 - role_binding.yaml
+- profiling_runner_configmap_role.yaml
+- profiling_runner_configmap_role_binding.yaml
 - leader_election_role.yaml
 - leader_election_role_binding.yaml
 # The following RBAC configurations are used to protect
@@ -22,7 +24,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the kratos itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- workloadprofile_admin_role.yaml
+- workloadprofile_editor_role.yaml
+- workloadprofile_viewer_role.yaml
 - cudaexperiment_admin_role.yaml
 - cudaexperiment_editor_role.yaml
 - cudaexperiment_viewer_role.yaml
-

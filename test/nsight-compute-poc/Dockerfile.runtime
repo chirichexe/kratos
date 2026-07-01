@@ -1,0 +1,23 @@
+ARG CUDA_IMAGE=nvidia/cuda:12.4.1-base-ubuntu22.04
+
+FROM ${CUDA_IMAGE}
+
+ARG KUBECTL_VERSION=v1.36.0
+ARG NSIGHT_COMPUTE_PACKAGE=nsight-compute-2024.1.1
+
+COPY test/nsight-compute-poc/profile.sh /scripts/profile.sh
+COPY profiling/parser/parse_ncu.py /scripts/parse_ncu.py
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl python3 "${NSIGHT_COMPUTE_PACKAGE}" \
+    && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
+    && chmod +x /usr/local/bin/kubectl /scripts/profile.sh /scripts/parse_ncu.py \
+    && rm -rf /var/lib/apt/lists/* \
+    && ncu_path="$(find /opt/nvidia -path '*nsight-compute*/ncu' -type f | grep -v '/target/' | head -n 1)" \
+    && printf '#!/bin/sh\nexec "%s" "$@"\n' "${ncu_path}" > /usr/local/bin/ncu \
+    && chmod +x /usr/local/bin/ncu \
+    && command -v ncu \
+    && command -v kubectl \
+    && python3 /scripts/parse_ncu.py --help >/dev/null
+
+ENTRYPOINT ["/scripts/profile.sh"]

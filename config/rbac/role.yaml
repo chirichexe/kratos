@@ -5,6 +5,17 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - batch
   resources:
   - jobs
@@ -35,7 +46,19 @@ rules:
   - gpu.scheduler.io
   resources:
   - cudaexperiments/status
+  - workloadprofiles/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - gpu.scheduler.io
+  resources:
+  - workloadprofiles
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch

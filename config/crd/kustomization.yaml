@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/gpu.scheduler.io_cudaexperiments.yaml
+- bases/gpu.scheduler.io_workloadprofiles.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
