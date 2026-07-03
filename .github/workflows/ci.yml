@@ -36,6 +36,9 @@ on:
       - .golangci.yml
       - .github/workflows/ci.yml
 
+permissions:
+  contents: read
+
 jobs:
   go:
     runs-on: ubuntu-latest
