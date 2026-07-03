@@ -18,6 +18,9 @@ on:
       - .github/ISSUE_TEMPLATE/**
       - .github/workflows/markdown.yml
 
+permissions:
+  contents: read
+
 jobs:
   markdown:
     runs-on: ubuntu-latest
