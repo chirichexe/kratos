@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://chirichexe.github.io/kratos/getting-started/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Quick Start - KRATOS</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">KRATOS</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href=".." class="nav-link">Home</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Getting Started</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="./" class="dropdown-item active" aria-current="page">Quick Start</a>
+</li>
+                                    
+<li>
+    <a href="kind-gpu/" class="dropdown-item">Local GPU Lab</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../architecture/" class="nav-link">Architecture</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../operator/" class="nav-link">Operator</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Experiments</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../experiments/" class="dropdown-item">Overview</a>
+</li>
+                                    
+<li>
+    <a href="../experiments/nsight-compute-poc/" class="dropdown-item">Nsight Compute PoC</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Development</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../development/workflow/" class="dropdown-item">Workflow</a>
+</li>
+                                    
+<li>
+    <a href="../development/project-layout/" class="dropdown-item">Project Structure</a>
+</li>
+                                </ul>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href=".." class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="kind-gpu/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="https://github.com/chirichexe/kratos/edit/master/docs/getting-started/README.md" class="nav-link">Edit on chirichexe/kratos
+                                    </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#getting-started" class="nav-link">Getting Started</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#required-tools" class="nav-link">Required Tools</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#local-check" class="nav-link">Local Check</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#run-locally" class="nav-link">Run Locally</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#submit-a-cuda-experiment" class="nav-link">Submit a CUDA Experiment</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#kubebuilder-setup" class="nav-link">Kubebuilder Setup</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h1>
+<p>KRATOS is a Go/Kubebuilder operator scaffold. It is not a complete deployable
+GPU platform yet.</p>
+<h2 id="required-tools">Required Tools<a class="headerlink" href="#required-tools" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Go 1.23 or newer</li>
+<li>Docker or another OCI runtime</li>
+<li>kubectl and kustomize</li>
+<li>Kubebuilder and controller-gen</li>
+<li>Access to a Kubernetes cluster for integration work</li>
+</ul>
+<p>The full experiment stack will also need the NVIDIA device plugin, Volcano,
+Prometheus, Grafana, DCGM Exporter, Nsight Compute, and CUDA workload images.</p>
+<h2 id="local-check">Local Check<a class="headerlink" href="#local-check" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">git clone git@github.com:chirichexe/kratos.git
+cd kratos
+make test
+</code></pre>
+<p>The <code>make test</code> target prepares envtest binaries before running controller
+tests. If the default Go build cache is not writable, override it:</p>
+<pre><code class="language-bash">GOCACHE=/tmp/kratos-go-build-cache make test
+</code></pre>
+<h2 id="run-locally">Run Locally<a class="headerlink" href="#run-locally" title="Permanent link">&para;</a></h2>
+<p>Install the <code>CUDAExperiment</code> CRD into the current Kubernetes context:</p>
+<pre><code class="language-bash">make install
+</code></pre>
+<p>Run the controller from your host:</p>
+<pre><code class="language-bash">make run
+</code></pre>
+<p>Apply the sample custom resource from another terminal:</p>
+<pre><code class="language-bash">kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiments.gpu.scheduler.io
+</code></pre>
+<h2 id="submit-a-cuda-experiment">Submit a CUDA Experiment<a class="headerlink" href="#submit-a-cuda-experiment" title="Permanent link">&para;</a></h2>
+<p>A <code>CUDAExperiment</code> describes the CUDA image to run and the GPU resources needed
+by each Job pod. The minimal fields are:</p>
+<pre><code class="language-yaml">apiVersion: gpu.scheduler.io/v1alpha1
+kind: CUDAExperiment
+metadata:
+  name: cuda-vector-add
+spec:
+  image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
+  runtimeClassName: nvidia
+  replicas: 1
+  gpuRequired: 1
+</code></pre>
+<p><code>runtimeClassName</code> defaults to <code>nvidia</code>, which is required by the local GPU
+Kind setup so the pod starts through the NVIDIA runtime handler. Set <code>command</code>
+and <code>arguments</code> only when the image entrypoint is not enough for your workload.</p>
+<p>Submit and inspect an experiment:</p>
+<pre><code class="language-bash">kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiment cuda-vector-add -o yaml
+kubectl get job cuda-vector-add-execution
+kubectl get pods -l gpu.scheduler.io/experiment=cuda-vector-add
+kubectl logs job/cuda-vector-add-execution
+</code></pre>
+<p>The controller creates a Job named <code>&lt;experiment-name&gt;-execution</code> and records
+that name in <code>status.executionJobName</code>. To rerun the same experiment name,
+delete the generated Job or create a new <code>CUDAExperiment</code> with a different
+name.</p>
+<h2 id="kubebuilder-setup">Kubebuilder Setup<a class="headerlink" href="#kubebuilder-setup" title="Permanent link">&para;</a></h2>
+<p>Use this sequence when regenerating the scaffold from a fresh operator setup:</p>
+<pre><code class="language-bash">kubebuilder init --domain scheduler.io --repo github.com/chirichexe/kratos
+kubebuilder create api --group gpu --version v1alpha1 --kind CUDAExperiment --resource --controller
+make manifests
+make generate
+</code></pre>
+<p>For a local GPU-enabled lab, see <a href="kind-gpu/">Local GPU Lab</a>.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

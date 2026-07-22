@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://chirichexe.github.io/kratos/getting-started/kind-gpu/">
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+        <title>Local GPU Lab - KRATOS</title>
+        <link href="../../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../../css/brands.min.css" rel="stylesheet">
+        <link href="../../css/solid.min.css" rel="stylesheet">
+        <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="../..">KRATOS</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href="../.." class="nav-link">Home</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Getting Started</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../" class="dropdown-item">Quick Start</a>
+</li>
+                                    
+<li>
+    <a href="./" class="dropdown-item active" aria-current="page">Local GPU Lab</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../architecture/" class="nav-link">Architecture</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../operator/" class="nav-link">Operator</a>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Experiments</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../../experiments/" class="dropdown-item">Overview</a>
+</li>
+                                    
+<li>
+    <a href="../../experiments/nsight-compute-poc/" class="dropdown-item">Nsight Compute PoC</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="nav-item dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Development</a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../../development/workflow/" class="dropdown-item">Workflow</a>
+</li>
+                                    
+<li>
+    <a href="../../development/project-layout/" class="dropdown-item">Project Structure</a>
+</li>
+                                </ul>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="../../architecture/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="https://github.com/chirichexe/kratos/edit/master/docs/getting-started/kind-gpu.md" class="nav-link">Edit on chirichexe/kratos
+                                    </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#local-gpu-lab" class="nav-link">Local GPU Lab</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#prerequisites" class="nav-link">Prerequisites</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#configure-docker-gpu-support" class="nav-link">Configure Docker GPU Support</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#create-the-gpu-cluster" class="nav-link">Create the GPU Cluster</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#install-gpu-time-slicing" class="nav-link">Install GPU Time-Slicing</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#verify-cuda-scheduling" class="nav-link">Verify CUDA Scheduling</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#install-kratos" class="nav-link">Install KRATOS</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#run-a-cudaexperiment" class="nav-link">Run a CUDAExperiment</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="local-gpu-lab">Local GPU Lab<a class="headerlink" href="#local-gpu-lab" title="Permanent link">&para;</a></h1>
+<p>This page describes an operational local setup for running KRATOS against a
+Kubernetes cluster that can schedule CUDA workloads. It uses <code>nvkind</code> to create
+a kind-based cluster with NVIDIA GPU support, then installs the NVIDIA device
+plugin with time-slicing enabled.</p>
+<p>Time-slicing advertises multiple logical <code>nvidia.com/gpu</code> slots for each
+physical GPU. It is useful for local tests, but it does not provide memory or
+fault isolation between workloads.</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Linux host with a working NVIDIA driver.</li>
+<li>Docker.</li>
+<li>NVIDIA Container Toolkit.</li>
+<li><code>kind</code>, <code>kubectl</code>, <code>helm</code>, <code>jq</code>, and <code>nvkind</code>.</li>
+<li>A KRATOS controller image that is available to the cluster.</li>
+</ul>
+<h2 id="configure-docker-gpu-support">Configure Docker GPU Support<a class="headerlink" href="#configure-docker-gpu-support" title="Permanent link">&para;</a></h2>
+<p>Configure Docker to use the NVIDIA runtime:</p>
+<pre><code class="language-bash">sudo nvidia-ctk runtime configure --runtime=docker --set-as-default --cdi.enabled
+sudo nvidia-ctk config --set accept-nvidia-visible-devices-as-volume-mounts=true --in-place
+sudo systemctl restart docker
+</code></pre>
+<p>Verify that containers can access the GPU:</p>
+<pre><code class="language-bash">docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+</code></pre>
+<h2 id="create-the-gpu-cluster">Create the GPU Cluster<a class="headerlink" href="#create-the-gpu-cluster" title="Permanent link">&para;</a></h2>
+<p>Create the cluster:</p>
+<pre><code class="language-bash">nvkind cluster create --name kratos-gpu
+</code></pre>
+<p>Wait for the nodes to become ready:</p>
+<pre><code class="language-bash">kubectl wait --for=condition=Ready nodes --all --timeout=120s
+kubectl get nodes
+</code></pre>
+<p>Check that <code>nvkind</code> can see the host GPU:</p>
+<pre><code class="language-bash">nvkind cluster print-gpus --name kratos-gpu
+</code></pre>
+<h2 id="install-gpu-time-slicing">Install GPU Time-Slicing<a class="headerlink" href="#install-gpu-time-slicing" title="Permanent link">&para;</a></h2>
+<p>Add the NVIDIA device plugin Helm repository:</p>
+<pre><code class="language-bash">helm repo add nvdp https://nvidia.github.io/k8s-device-plugin
+helm repo update
+</code></pre>
+<p>Create a device plugin configuration. This example exposes each physical GPU
+as three schedulable logical GPU slots:</p>
+<pre><code class="language-bash">cat &lt;&lt;'EOF' &gt; /tmp/nvidia-device-plugin-config.yaml
+version: v1
+flags:
+  migStrategy: &quot;none&quot;
+  failOnInitError: true
+  nvidiaDriverRoot: &quot;/&quot;
+  plugin:
+    deviceListStrategy: envvar
+    deviceIDStrategy: uuid
+sharing:
+  timeSlicing:
+    failRequestsGreaterThanOne: true
+    resources:
+    - name: nvidia.com/gpu
+      replicas: 3
+EOF
+</code></pre>
+<p>Install the device plugin:</p>
+<pre><code class="language-bash">helm upgrade -i nvdp nvdp/nvidia-device-plugin \
+  --namespace nvidia-device-plugin \
+  --create-namespace \
+  --set runtimeClassName=nvidia \
+  --set config.default=config \
+  --set-file config.map.config=/tmp/nvidia-device-plugin-config.yaml \
+  --set affinity=null
+</code></pre>
+<p>Check the plugin pods:</p>
+<pre><code class="language-bash">kubectl get ds -n nvidia-device-plugin
+kubectl get pods -n nvidia-device-plugin
+</code></pre>
+<p>Check the GPU capacity advertised by the nodes:</p>
+<pre><code class="language-bash">kubectl get nodes -o json | jq -r '
+.items[] | {
+  name: .metadata.name,
+  capacity: .status.capacity[&quot;nvidia.com/gpu&quot;],
+  allocatable: .status.allocatable[&quot;nvidia.com/gpu&quot;]
+}'
+</code></pre>
+<p>A node with one physical GPU and <code>replicas: 3</code> should advertise:</p>
+<pre><code class="language-json">{
+  &quot;capacity&quot;: &quot;3&quot;,
+  &quot;allocatable&quot;: &quot;3&quot;
+}
+</code></pre>
+<h2 id="verify-cuda-scheduling">Verify CUDA Scheduling<a class="headerlink" href="#verify-cuda-scheduling" title="Permanent link">&para;</a></h2>
+<p>Create <code>gpu-vectoradd.yaml</code>:</p>
+<pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-vectoradd
+spec:
+  runtimeClassName: nvidia
+  restartPolicy: Never
+  containers:
+  - name: cuda
+    image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+</code></pre>
+<p>Run the pod and inspect the result:</p>
+<pre><code class="language-bash">kubectl apply -f gpu-vectoradd.yaml
+kubectl get pod gpu-vectoradd
+kubectl logs gpu-vectoradd
+</code></pre>
+<h2 id="install-kratos">Install KRATOS<a class="headerlink" href="#install-kratos" title="Permanent link">&para;</a></h2>
+<p>Install the <code>CUDAExperiment</code> CRD:</p>
+<pre><code class="language-bash">make install
+kubectl get crd cudaexperiments.gpu.scheduler.io
+</code></pre>
+<p>If the image exists only on the local Docker daemon, load it into the cluster
+before deploying:</p>
+<pre><code class="language-bash">kind load docker-image &lt;local-image&gt; --name kratos-gpu
+</code></pre>
+<p>Deploy the controller with an image that the cluster can pull or already has
+loaded:</p>
+<pre><code class="language-bash">make docker-build IMG=kratos-controller:v0.1.0
+kind load docker-image kratos-controller:v0.1.0 --name kratos-operator
+make deploy IMG=kratos-controller:v0.1.0
+</code></pre>
+<p>Check the controller deployment:</p>
+<pre><code class="language-bash">kubectl get deployments -n kratos-system
+kubectl get pods -n kratos-system
+</code></pre>
+<h2 id="run-a-cudaexperiment">Run a CUDAExperiment<a class="headerlink" href="#run-a-cudaexperiment" title="Permanent link">&para;</a></h2>
+<p>Start from the sample custom resource:</p>
+<pre><code class="language-bash">kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
+kubectl get cudaexperiments
+</code></pre>
+<p>The sample requests one GPU through the <code>gpuRequired</code> field. In a time-sliced
+local lab, that request consumes one advertised logical <code>nvidia.com/gpu</code> slot.</p>
+<p>References:</p>
+<ul>
+<li><a href="https://github.com/NVIDIA/nvkind">nvkind</a></li>
+<li><a href="https://github.com/NVIDIA/k8s-device-plugin#shared-access-to-gpus">NVIDIA device plugin time-slicing</a></li>
+</ul></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "../..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../../js/base.js"></script>
+        <script src="../../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
