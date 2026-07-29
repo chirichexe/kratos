@@ -15,7 +15,7 @@ fault isolation between workloads.
 - Docker.
 - NVIDIA Container Toolkit.
 - `kind`, `kubectl`, `helm`, `jq`, and `nvkind`.
-- A KRATOS controller image that is available to the cluster.
+- A KRATOS controller image and Nsight Compute runner image available to the cluster.
 
 ## Configure Docker GPU Support
 
@@ -35,20 +35,22 @@ docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 
 ## Create the GPU Cluster
 
-Create the cluster:
+Create the cluster using `nvkind`. By default, `nvkind` spins up a control-plane (master) node and a worker node with GPU access:
 
 ```bash
 nvkind cluster create --name kratos-gpu
 ```
 
-Wait for the nodes to become ready:
+Alternatively, you can inspect or customize node declarations via [cluster/nvkind-cluster.yaml](../../cluster/nvkind-cluster.yaml).
+
+Wait for all nodes to become ready:
 
 ```bash
 kubectl wait --for=condition=Ready nodes --all --timeout=120s
 kubectl get nodes
 ```
 
-Check that `nvkind` can see the host GPU:
+Verify that `nvkind` detects the host GPU on the worker node:
 
 ```bash
 nvkind cluster print-gpus --name kratos-gpu
@@ -97,11 +99,10 @@ helm upgrade -i nvdp nvdp/nvidia-device-plugin \
   --set affinity=null
 ```
 
-Check the plugin pods:
+Wait for the device plugin rollout to finish:
 
 ```bash
-kubectl get ds -n nvidia-device-plugin
-kubectl get pods -n nvidia-device-plugin
+kubectl rollout status daemonset nvdp-nvidia-device-plugin -n nvidia-device-plugin --timeout=60s
 ```
 
 Check the GPU capacity advertised by the nodes:
@@ -119,6 +120,7 @@ A node with one physical GPU and `replicas: 3` should advertise:
 
 ```json
 {
+  "name": "kratos-gpu-worker",
   "capacity": "3",
   "allocatable": "3"
 }
@@ -126,7 +128,7 @@ A node with one physical GPU and `replicas: 3` should advertise:
 
 ## Verify CUDA Scheduling
 
-Create `gpu-vectoradd.yaml`:
+Create a test pod `gpu-vectoradd.yaml`:
 
 ```yaml
 apiVersion: v1
@@ -148,53 +150,79 @@ Run the pod and inspect the result:
 
 ```bash
 kubectl apply -f gpu-vectoradd.yaml
-kubectl get pod gpu-vectoradd
+kubectl wait --for=jsonpath='{.status.phase}'=Completed pod/gpu-vectoradd --timeout=60s
 kubectl logs gpu-vectoradd
 ```
 
-## Install KRATOS
+Expected output includes `Test PASSED`.
 
-Install the `CUDAExperiment` CRD:
+## Install KRATOS and Nsight Compute Runner
 
-```bash
-make install
-kubectl get crd cudaexperiments.gpu.scheduler.io
-```
+1. Install the `CUDAExperiment` and `WorkloadProfile` CRDs:
 
-If the image exists only on the local Docker daemon, load it into the cluster
-before deploying:
+   ```bash
+   make install
+   kubectl get crd cudaexperiments.gpu.scheduler.io workloadprofiles.gpu.scheduler.io
+   ```
 
-```bash
-kind load docker-image <local-image> --name kratos-gpu
-```
+2. Apply the profiling runner RBAC permissions:
 
-Deploy the controller with an image that the cluster can pull or already has
-loaded:
+   ```bash
+   kubectl apply -f config/rbac/profiling_runner_configmap_role.yaml
+   kubectl apply -f config/rbac/profiling_runner_configmap_role_binding.yaml
+   ```
 
-```bash
-make docker-build IMG=kratos-controller:v0.1.0
-kind load docker-image kratos-controller:v0.1.0 --name kratos-operator
-make deploy IMG=kratos-controller:v0.1.0
-```
+3. Build and load the controller image:
 
-Check the controller deployment:
+   ```bash
+   make docker-build IMG=kratos-controller:v0.1.0
+   kind load docker-image kratos-controller:v0.1.0 --name kratos-gpu
+   ```
 
-```bash
-kubectl get deployments -n kratos-system
-kubectl get pods -n kratos-system
-```
+4. Build and load the Nsight Compute profiling runner image:
+
+   ```bash
+   cd test/nsight-compute-poc
+   make build
+   make load CLUSTER=kratos-gpu
+   cd ../..
+   ```
+
+5. Deploy the controller manager:
+
+   ```bash
+   make deploy IMG=kratos-controller:v0.1.0
+   kubectl rollout status deployment/kratos-controller-manager -n kratos-system
+   ```
 
 ## Run a CUDAExperiment
 
-Start from the sample custom resource:
+Apply the sample custom resource:
 
 ```bash
 kubectl apply -f config/samples/gpu_v1alpha1_cudaexperiment.yaml
-kubectl get cudaexperiments
+kubectl get cudaexperiments.gpu.scheduler.io
 ```
 
-The sample requests one GPU through the `gpuRequired` field. In a time-sliced
-local lab, that request consumes one advertised logical `nvidia.com/gpu` slot.
+Inspect the profiling and execution flow:
+
+1. **Profiling Job**:
+   ```bash
+   kubectl get jobs
+   kubectl logs job/cuda-vector-add-profiling
+   ```
+2. **Workload Profile & Summary ConfigMap**:
+   ```bash
+   kubectl get configmap cuda-vector-add-profile-summary -o yaml
+   kubectl get workloadprofile cuda-vector-add-profile -o yaml
+   ```
+3. **Execution Job**:
+   ```bash
+   kubectl get job cuda-vector-add-execution
+   kubectl logs job/cuda-vector-add-execution
+   ```
+
+The sample requests one GPU through `gpuRequired`. In a time-sliced local lab, that request consumes one advertised logical `nvidia.com/gpu` slot.
 
 References:
 
