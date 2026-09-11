@@ -1,0 +1,170 @@
+================================================================================
+KRATOS - PROJECT NOTES
+================================================================================
+
+--------------------------------------------------------------------------------
+WHAT THIS PROJECT DOES
+--------------------------------------------------------------------------------
+
+Kratos is a Kubernetes operator that automates running CUDA workloads on GPU
+nodes. The full loop is:
+
+  CUDAExperiment
+      |
+      v
+  ProfilingJob (runs ncu - Nsight Compute profiler)
+      |
+      v
+  ConfigMap (summary.json with profiling results)
+      |
+      v
+  WorkloadProfile (CRD storing what kind of workload it is: memory-bound,
+                   compute-bound, mixed)
+      |
+      v
+  [SCORING - picks the best node for the workload]
+      |
+      v
+  ExecutionJob (the actual CUDA workload runs here)
+
+
+--------------------------------------------------------------------------------
+FILE MAP - WHERE IS WHAT
+--------------------------------------------------------------------------------
+
+api/v1alpha1/cudaexperiment_types.go
+    CUDAExperiment CRD definition.
+    Fields: image, command, replicas, gpuRequired, runtimeClassName,
+    minimumComputeCapability, minimumMemory, profilingEnabled, distributed, etc.
+
+api/v1alpha1/workloadprofile_types.go
+    WorkloadProfile CRD definition.
+    Fields: workloadImage, command, sourceCudaExperiment.
+    Status: boundType (compute-bound / memory-bound / mixed / unknown),
+            metrics (map of profiling metric values).
+
+internal/controller/cudaexperiment_controller.go
+    Main reconciliation loop.
+    Watches CUDAExperiment -> creates ProfilingJob -> reads ConfigMap ->
+    creates WorkloadProfile -> creates ExecutionJob.
+
+internal/controller/cudaexperiment_names.go
+    Naming helpers: deterministic names for Jobs, ConfigMaps, etc.
+
+internal/scoring/models.go       [NEW - Phase 1]
+    Domain models:
+    - GPUSpec: normalized GPU hardware description
+      (product, arch family, compute capability major/minor,
+       SM count, VRAM in bytes, memory bandwidth GB/s, GPU count)
+    - ScoredNode: node name + total score + per-component score breakdown
+    - NodeScorer interface: ScoreNodes(ctx, profile, nodes) -> []ScoredNode
+
+internal/scoring/gpu.go          [NEW - Phase 1]
+    GPU capability extraction from corev1.Node:
+    - Reads NVIDIA GPU Operator labels (nvidia.com/gpu.product, .family,
+      .memory, .compute.major, .compute.minor)
+    - Reads allocatable nvidia.com/gpu quantity for GPU count
+    - Falls back to a built-in lookup table (~20 known GPUs from Pascal to
+      Hopper) for SM counts and memory bandwidth, which are not exposed
+      as Kubernetes labels
+    - IsGPUNode(node): returns true if node has any GPU
+    - FilterGPUNodes(nodes, minGPUs): filters out nodes below a GPU threshold
+
+internal/scoring/gpu_test.go     [NEW - Phase 1]
+    20 table-driven unit tests (stdlib testing, no Ginkgo) for GPU label
+    parsing, spec extraction, node filtering, and normalization helpers.
+
+internal/scoring/scorer.go       [NEW - Phase 2]
+    WeightedScorer: concrete NodeScorer implementation.
+    - Normalizes each GPU metric (SM count, bandwidth, VRAM, compute cap)
+      to a 0–1000 scale using reference values from top-tier hardware
+    - Applies bound-type-specific weight profiles:
+        compute-bound: sm=40, compute=35, vram=15, bandwidth=10
+        memory-bound:  bandwidth=45, vram=30, compute=15, sm=10
+        mixed/unknown: balanced 25/25/25/25
+    - Returns descending-sorted ScoredNode slice with lexical tie-breaking
+    - Thread-safe, zero side-effects on inputs, structured logr logging
+
+internal/scoring/scorer_test.go  [NEW - Phase 2]
+    18 unit tests covering:
+    - Compute-bound ranking (H100 > A100 > T4)
+    - Memory-bound ranking (H200 > A100 > T4)
+    - Mixed / unknown / nil profile (balanced weights)
+    - Heterogeneous 6-GPU cluster ranking
+    - Ineligible node filtering (zero GPUs, CPU-only)
+    - Deterministic tie-breaking (lexical on equal score)
+    - Input slice immutability
+    - Breakdown completeness + sum == TotalScore
+    - normalize() edge cases
+    - weightsForProfile() for all bound types
+
+config/samples/
+    Example CRs to apply to the cluster for manual testing.
+
+
+--------------------------------------------------------------------------------
+WHAT IS ACTUALLY WORKING
+--------------------------------------------------------------------------------
+
+[DONE] CUDAExperiment reconciliation loop (controller)
+[DONE] ProfilingJob creation (runs ncu profiler)
+[DONE] WorkloadProfile creation from profiling results
+[DONE] GPUSpec extraction from node labels + fallback hardware lookup
+[DONE] Node filtering (exclude nodes without GPUs)
+[DONE] NodeScorer interface defined
+[DONE] Concrete scoring heuristics (WeightedScorer):
+       - memory-bound workloads -> prefer high-bandwidth / high-VRAM GPUs
+       - compute-bound workloads -> prefer more SMs / higher compute cap
+       - mixed/unknown -> balanced scoring across all dimensions
+
+[TODO] Wire scorer into the controller so ExecutionJob lands on best node
+
+
+--------------------------------------------------------------------------------
+HOW TO RUN UNIT TESTS (no cluster needed)
+--------------------------------------------------------------------------------
+
+  go test ./internal/scoring/... -v
+
+
+--------------------------------------------------------------------------------
+HOW TO TEST WITH YOUR ACTUAL GPU (cluster)
+--------------------------------------------------------------------------------
+
+1. Label your worker node (if GPU Operator is not installed):
+
+   kubectl label node kratos-gpu-worker \
+     nvidia.com/gpu.product="NVIDIA-GeForce-RTX-3050" \
+     nvidia.com/gpu.family="ampere" \
+     nvidia.com/gpu.memory="6144" \
+     nvidia.com/gpu.compute.major="8" \
+     nvidia.com/gpu.compute.minor="6" \
+     --overwrite
+
+2. Run the operator locally against the cluster:
+
+   make run
+
+3. Apply a sample CUDAExperiment:
+
+   kubectl apply -k config/samples/
+
+4. Watch the loop:
+
+   kubectl get cudaexperiment,workloadprofile,jobs -w
+
+
+To get the profiling: 
+ kubectl get configmap cuda-vector-add-profile-summary -o jsonpath='{.data.summary\.json}' | python3 -m json.tool
+
+--------------------------------------------------------------------------------
+CLUSTER INFO
+--------------------------------------------------------------------------------
+
+Kind cluster:   kratos-gpu (2 nodes)
+  kratos-gpu-control-plane   - no GPU
+  kratos-gpu-worker          - nvidia.com/gpu: 3 (RTX 3050 Laptop, Ampere 8.6)
+
+GPU Operator:   NOT installed (labels must be added manually for now)
+
+================================================================================
