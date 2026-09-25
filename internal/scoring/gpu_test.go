@@ -28,6 +28,17 @@ import (
 // helpers
 // ---------------------------------------------------------------------------
 
+const (
+	productA100 = "NVIDIA-A100-SXM4-80GB"
+	productT4   = "NVIDIA-T4"
+
+	familyAmpere = "ampere"
+	nodeOneGPU   = "one-gpu"
+	nodeFourGPU  = "four-gpus"
+	nodeEightGPU = "eight-gpus"
+	normA100     = "a100-sxm4-80gb"
+)
+
 // makeNode builds a minimal corev1.Node for testing.
 func makeNode(name string, labels map[string]string, allocatableGPUs int64) corev1.Node {
 	node := corev1.Node{
@@ -58,16 +69,16 @@ func TestExtractGPUSpec(t *testing.T) {
 		{
 			name: "Full labels with allocatable GPUs",
 			node: makeNode("gpu-node-1", map[string]string{
-				LabelGPUProduct:         "NVIDIA-A100-SXM4-80GB",
-				LabelGPUFamily:          "ampere",
+				LabelGPUProduct:         productA100,
+				LabelGPUFamily:          familyAmpere,
 				LabelGPUMemory:          "81920",
 				LabelGPUComputeCapMajor: "8",
 				LabelGPUComputeCapMinor: "0",
 			}, 8),
 			expect: func(t *testing.T, spec GPUSpec) {
 				t.Helper()
-				assertEqual(t, "Product", spec.Product, "NVIDIA-A100-SXM4-80GB")
-				assertEqual(t, "ArchFamily", spec.ArchFamily, "Ampere")
+				assertEqual(t, "Product", spec.Product, productA100)
+				assertEqual(t, "ArchFamily", spec.ArchFamily, archAmpere)
 				assertEqual(t, "ComputeMajor", spec.ComputeMajor, 8)
 				assertEqual(t, "ComputeMinor", spec.ComputeMinor, 0)
 				assertEqual(t, "Count", spec.Count, int64(8))
@@ -88,12 +99,12 @@ func TestExtractGPUSpec(t *testing.T) {
 		{
 			name: "Product label only triggers fallback",
 			node: makeNode("gpu-node-2", map[string]string{
-				LabelGPUProduct: "NVIDIA-T4",
+				LabelGPUProduct: productT4,
 			}, 1),
 			expect: func(t *testing.T, spec GPUSpec) {
 				t.Helper()
-				assertEqual(t, "Product", spec.Product, "NVIDIA-T4")
-				assertEqual(t, "ArchFamily", spec.ArchFamily, "Turing")
+				assertEqual(t, "Product", spec.Product, productT4)
+				assertEqual(t, "ArchFamily", spec.ArchFamily, archTuring)
 				assertEqual(t, "ComputeMajor", spec.ComputeMajor, 7)
 				assertEqual(t, "ComputeMinor", spec.ComputeMinor, 5)
 				assertEqual(t, "SMCount", spec.SMCount, 40)
@@ -109,7 +120,7 @@ func TestExtractGPUSpec(t *testing.T) {
 		{
 			name: "GPU count falls back to label when allocatable is zero",
 			node: makeNode("gpu-node-3", map[string]string{
-				LabelGPUProduct: "NVIDIA-A100-SXM4-80GB",
+				LabelGPUProduct: productA100,
 				LabelGPUCount:   "4",
 			}, 0),
 			expect: func(t *testing.T, spec GPUSpec) {
@@ -130,8 +141,8 @@ func TestExtractGPUSpec(t *testing.T) {
 		{
 			name: "Labels take precedence over fallback for VRAM and compute capability",
 			node: makeNode("gpu-node-4", map[string]string{
-				LabelGPUProduct:         "NVIDIA-A100-SXM4-80GB",
-				LabelGPUFamily:          "ampere",
+				LabelGPUProduct:         productA100,
+				LabelGPUFamily:          familyAmpere,
 				LabelGPUMemory:          "40960",
 				LabelGPUComputeCapMajor: "8",
 				LabelGPUComputeCapMinor: "6",
@@ -192,7 +203,7 @@ func TestIsGPUNode(t *testing.T) {
 		{
 			name: "Node with product label only",
 			node: makeNode("gpu-2", map[string]string{
-				LabelGPUProduct: "NVIDIA-T4",
+				LabelGPUProduct: productT4,
 			}, 0),
 			expect: true,
 		},
@@ -227,9 +238,9 @@ func TestIsGPUNode(t *testing.T) {
 func TestFilterGPUNodes(t *testing.T) {
 	nodes := []corev1.Node{
 		makeNode("no-gpu", nil, 0),
-		makeNode("one-gpu", map[string]string{LabelGPUProduct: "NVIDIA-T4"}, 1),
-		makeNode("four-gpus", map[string]string{LabelGPUProduct: "NVIDIA-A100-SXM4-80GB"}, 4),
-		makeNode("eight-gpus", map[string]string{LabelGPUProduct: "NVIDIA-A100-SXM4-80GB"}, 8),
+		makeNode(nodeOneGPU, map[string]string{LabelGPUProduct: productT4}, 1),
+		makeNode(nodeFourGPU, map[string]string{LabelGPUProduct: productA100}, 4),
+		makeNode(nodeEightGPU, map[string]string{LabelGPUProduct: productA100}, 8),
 	}
 
 	tests := []struct {
@@ -242,19 +253,19 @@ func TestFilterGPUNodes(t *testing.T) {
 			name:      "minGPUs=1 filters out no-gpu node",
 			minGPUs:   1,
 			wantLen:   3,
-			wantNames: []string{"one-gpu", "four-gpus", "eight-gpus"},
+			wantNames: []string{nodeOneGPU, nodeFourGPU, nodeEightGPU},
 		},
 		{
 			name:      "minGPUs=4 keeps nodes with >= 4",
 			minGPUs:   4,
 			wantLen:   2,
-			wantNames: []string{"four-gpus", "eight-gpus"},
+			wantNames: []string{nodeFourGPU, nodeEightGPU},
 		},
 		{
 			name:      "minGPUs=8 keeps only eight-gpus",
 			minGPUs:   8,
 			wantLen:   1,
-			wantNames: []string{"eight-gpus"},
+			wantNames: []string{nodeEightGPU},
 		},
 		{
 			name:    "minGPUs=16 filters everything",
@@ -265,7 +276,7 @@ func TestFilterGPUNodes(t *testing.T) {
 			name:      "minGPUs=0 keeps all nodes",
 			minGPUs:   0,
 			wantLen:   4,
-			wantNames: []string{"no-gpu", "one-gpu", "four-gpus", "eight-gpus"},
+			wantNames: []string{"no-gpu", nodeOneGPU, nodeFourGPU, nodeEightGPU},
 		},
 	}
 
@@ -293,9 +304,9 @@ func TestNormalizeProduct(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"NVIDIA-A100-SXM4-80GB", "a100-sxm4-80gb"},
-		{"NVIDIA A100 SXM4 80GB", "a100-sxm4-80gb"},
-		{"NVIDIA-T4", "t4"},
+		{productA100, normA100},
+		{"NVIDIA A100 SXM4 80GB", normA100},
+		{productT4, "t4"},
 		{"Tesla-V100-SXM2", "tesla-v100-sxm2"},
 		{"", ""},
 	}
@@ -319,9 +330,9 @@ func TestNormalizeArch(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"ampere", "Ampere"},
-		{"hopper", "Hopper"},
-		{"Turing", "Turing"},
+		{familyAmpere, archAmpere},
+		{"hopper", archHopper},
+		{archTuring, archTuring},
 		{"", ""},
 	}
 

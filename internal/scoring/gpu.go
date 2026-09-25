@@ -57,6 +57,16 @@ const (
 // Known GPU hardware specifications (fallback lookup)
 // ---------------------------------------------------------------------------
 
+// GPU micro-architecture family names, as stored in GPUSpec.ArchFamily.
+const (
+	archHopper      = "Hopper"
+	archAdaLovelace = "Ada Lovelace"
+	archAmpere      = "Ampere"
+	archTuring      = "Turing"
+	archVolta       = "Volta"
+	archPascal      = "Pascal"
+)
+
 // gpuHardwareSpec holds hardware parameters that cannot be read from
 // Kubernetes labels and must be inferred from the product name.
 type gpuHardwareSpec struct {
@@ -72,30 +82,30 @@ type gpuHardwareSpec struct {
 // The key is compared against the lower-cased, dash-normalized product label.
 var knownGPUs = map[string]gpuHardwareSpec{
 	// Hopper
-	"h100-sxm":  {ArchFamily: "Hopper", ComputeMajor: 9, ComputeMinor: 0, SMCount: 132, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 3350},
-	"h100-pcie": {ArchFamily: "Hopper", ComputeMajor: 9, ComputeMinor: 0, SMCount: 114, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 2000},
-	"h200":      {ArchFamily: "Hopper", ComputeMajor: 9, ComputeMinor: 0, SMCount: 132, VRAMBytes: 141 * giB, MemoryBandwidthGBps: 4800},
+	"h100-sxm":  {ArchFamily: archHopper, ComputeMajor: 9, ComputeMinor: 0, SMCount: 132, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 3350},
+	"h100-pcie": {ArchFamily: archHopper, ComputeMajor: 9, ComputeMinor: 0, SMCount: 114, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 2000},
+	"h200":      {ArchFamily: archHopper, ComputeMajor: 9, ComputeMinor: 0, SMCount: 132, VRAMBytes: 141 * giB, MemoryBandwidthGBps: 4800},
 	// Ada Lovelace
-	"l40s":     {ArchFamily: "Ada Lovelace", ComputeMajor: 8, ComputeMinor: 9, SMCount: 142, VRAMBytes: 48 * giB, MemoryBandwidthGBps: 864},
-	"rtx-4090": {ArchFamily: "Ada Lovelace", ComputeMajor: 8, ComputeMinor: 9, SMCount: 128, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 1008},
-	"rtx-4080": {ArchFamily: "Ada Lovelace", ComputeMajor: 8, ComputeMinor: 9, SMCount: 76, VRAMBytes: 16 * giB, MemoryBandwidthGBps: 717},
+	"l40s":     {ArchFamily: archAdaLovelace, ComputeMajor: 8, ComputeMinor: 9, SMCount: 142, VRAMBytes: 48 * giB, MemoryBandwidthGBps: 864},
+	"rtx-4090": {ArchFamily: archAdaLovelace, ComputeMajor: 8, ComputeMinor: 9, SMCount: 128, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 1008},
+	"rtx-4080": {ArchFamily: archAdaLovelace, ComputeMajor: 8, ComputeMinor: 9, SMCount: 76, VRAMBytes: 16 * giB, MemoryBandwidthGBps: 717},
 	// Ampere
-	"a100-sxm4-80gb": {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 2039},
-	"a100-sxm4-40gb": {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 40 * giB, MemoryBandwidthGBps: 1555},
-	"a100-pcie-80gb": {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 1935},
-	"a100-pcie-40gb": {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 40 * giB, MemoryBandwidthGBps: 1555},
-	"a10":            {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 6, SMCount: 72, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 600},
-	"a30":            {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 0, SMCount: 56, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 933},
-	"rtx-3090":       {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 6, SMCount: 82, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 936},
-	"rtx-3080":       {ArchFamily: "Ampere", ComputeMajor: 8, ComputeMinor: 6, SMCount: 68, VRAMBytes: 10 * giB, MemoryBandwidthGBps: 760},
+	"a100-sxm4-80gb": {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 2039},
+	"a100-sxm4-40gb": {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 40 * giB, MemoryBandwidthGBps: 1555},
+	"a100-pcie-80gb": {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 80 * giB, MemoryBandwidthGBps: 1935},
+	"a100-pcie-40gb": {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 0, SMCount: 108, VRAMBytes: 40 * giB, MemoryBandwidthGBps: 1555},
+	"a10":            {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 6, SMCount: 72, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 600},
+	"a30":            {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 0, SMCount: 56, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 933},
+	"rtx-3090":       {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 6, SMCount: 82, VRAMBytes: 24 * giB, MemoryBandwidthGBps: 936},
+	"rtx-3080":       {ArchFamily: archAmpere, ComputeMajor: 8, ComputeMinor: 6, SMCount: 68, VRAMBytes: 10 * giB, MemoryBandwidthGBps: 760},
 	// Turing
-	"t4":          {ArchFamily: "Turing", ComputeMajor: 7, ComputeMinor: 5, SMCount: 40, VRAMBytes: 16 * giB, MemoryBandwidthGBps: 320},
-	"rtx-2080-ti": {ArchFamily: "Turing", ComputeMajor: 7, ComputeMinor: 5, SMCount: 68, VRAMBytes: 11 * giB, MemoryBandwidthGBps: 616},
+	"t4":          {ArchFamily: archTuring, ComputeMajor: 7, ComputeMinor: 5, SMCount: 40, VRAMBytes: 16 * giB, MemoryBandwidthGBps: 320},
+	"rtx-2080-ti": {ArchFamily: archTuring, ComputeMajor: 7, ComputeMinor: 5, SMCount: 68, VRAMBytes: 11 * giB, MemoryBandwidthGBps: 616},
 	// Volta
-	"v100-sxm2": {ArchFamily: "Volta", ComputeMajor: 7, ComputeMinor: 0, SMCount: 80, VRAMBytes: 32 * giB, MemoryBandwidthGBps: 900},
-	"v100-pcie": {ArchFamily: "Volta", ComputeMajor: 7, ComputeMinor: 0, SMCount: 80, VRAMBytes: 32 * giB, MemoryBandwidthGBps: 900},
+	"v100-sxm2": {ArchFamily: archVolta, ComputeMajor: 7, ComputeMinor: 0, SMCount: 80, VRAMBytes: 32 * giB, MemoryBandwidthGBps: 900},
+	"v100-pcie": {ArchFamily: archVolta, ComputeMajor: 7, ComputeMinor: 0, SMCount: 80, VRAMBytes: 32 * giB, MemoryBandwidthGBps: 900},
 	// Pascal
-	"p100": {ArchFamily: "Pascal", ComputeMajor: 6, ComputeMinor: 0, SMCount: 56, VRAMBytes: 16 * giB, MemoryBandwidthGBps: 732},
+	"p100": {ArchFamily: archPascal, ComputeMajor: 6, ComputeMinor: 0, SMCount: 56, VRAMBytes: 16 * giB, MemoryBandwidthGBps: 732},
 }
 
 const giB = 1 << 30 // 1 GiB in bytes
