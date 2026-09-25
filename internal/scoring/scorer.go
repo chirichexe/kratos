@@ -39,10 +39,18 @@ const (
 	// Reference values used for normalization. These represent the high-end
 	// of current datacenter hardware so that scores distribute well across
 	// the 0–1000 range. Values above the reference are clamped to 1000.
-	refSMCount             = 132   // H100-SXM
-	refBandwidthGBps       = 4800  // H200
+	refSMCount             = 132             // H100-SXM
+	refBandwidthGBps       = 4800            // H200
 	refVRAMBytes     int64 = 141 * (1 << 30) // H200 141 GiB
-	refComputeCap          = 9*10 + 0         // CC 9.0 (Hopper) → 90
+	refComputeCap          = 9*10 + 0        // CC 9.0 (Hopper) → 90
+)
+
+// Breakdown keys for the individual scoring components.
+const (
+	componentSM        = "sm"
+	componentBandwidth = "bandwidth"
+	componentVRAM      = "vram"
+	componentCompute   = "compute"
 )
 
 // ---------------------------------------------------------------------------
@@ -147,10 +155,10 @@ func scoreNode(name string, spec GPUSpec, w weights) ScoredNode {
 	computeScore := normalize(int64(spec.ComputeMajor*10+spec.ComputeMinor), int64(refComputeCap))
 
 	breakdown := map[string]int64{
-		"sm":        smScore * w.sm / 100,
-		"bandwidth": bwScore * w.bandwidth / 100,
-		"vram":      vramScore * w.vram / 100,
-		"compute":   computeScore * w.compute / 100,
+		componentSM:        smScore * w.sm / 100,
+		componentBandwidth: bwScore * w.bandwidth / 100,
+		componentVRAM:      vramScore * w.vram / 100,
+		componentCompute:   computeScore * w.compute / 100,
 	}
 
 	var total int64
@@ -172,11 +180,7 @@ func normalize(value, reference int64) int64 {
 	if reference <= 0 || value <= 0 {
 		return 0
 	}
-	score := value * maxNormalizedScore / reference
-	if score > maxNormalizedScore {
-		score = maxNormalizedScore
-	}
-	return score
+	return min(value*maxNormalizedScore/reference, maxNormalizedScore)
 }
 
 // sortScoredNodes sorts the slice in-place: descending by TotalScore,

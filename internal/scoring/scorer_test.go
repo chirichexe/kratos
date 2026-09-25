@@ -91,9 +91,9 @@ func TestScoreNodes_ComputeBound(t *testing.T) {
 	profile := profileWithBound(v1alpha1.WorkloadBoundCompute)
 
 	nodes := []corev1.Node{
-		gpuNode("t4-node", "NVIDIA-T4", 1),           // Turing 7.5, 40 SMs
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1), // Ampere 8.0, 108 SMs
-		gpuNode("h100-node", "NVIDIA-H100-SXM", 1),   // Hopper 9.0, 132 SMs
+		gpuNode("t4-node", productT4, 1),           // Turing 7.5, 40 SMs
+		gpuNode("a100-node", productA100, 1),       // Ampere 8.0, 108 SMs
+		gpuNode("h100-node", "NVIDIA-H100-SXM", 1), // Hopper 9.0, 132 SMs
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), profile, nodes)
@@ -117,7 +117,7 @@ func TestScoreNodes_ComputeBound(t *testing.T) {
 	// For compute-bound, the "sm" and "compute" breakdown components
 	// should dominate.
 	h100 := got[0]
-	if h100.Breakdown["sm"]+h100.Breakdown["compute"] <= h100.Breakdown["bandwidth"]+h100.Breakdown["vram"] {
+	if h100.Breakdown[componentSM]+h100.Breakdown[componentCompute] <= h100.Breakdown[componentBandwidth]+h100.Breakdown[componentVRAM] {
 		t.Errorf("expected compute-bound profile to weight sm+compute > bandwidth+vram, got %v", h100.Breakdown)
 	}
 }
@@ -131,9 +131,9 @@ func TestScoreNodes_MemoryBound(t *testing.T) {
 	profile := profileWithBound(v1alpha1.WorkloadBoundMemory)
 
 	nodes := []corev1.Node{
-		gpuNode("t4-node", "NVIDIA-T4", 1),             // 320 GB/s, 16 GiB
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1), // 2039 GB/s, 80 GiB
-		gpuNode("h200-node", "NVIDIA-H200", 1),          // 4800 GB/s, 141 GiB
+		gpuNode("t4-node", productT4, 1),       // 320 GB/s, 16 GiB
+		gpuNode("a100-node", productA100, 1),   // 2039 GB/s, 80 GiB
+		gpuNode("h200-node", "NVIDIA-H200", 1), // 4800 GB/s, 141 GiB
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), profile, nodes)
@@ -146,7 +146,7 @@ func TestScoreNodes_MemoryBound(t *testing.T) {
 
 	// For memory-bound, bandwidth+vram should dominate.
 	h200 := got[0]
-	if h200.Breakdown["bandwidth"]+h200.Breakdown["vram"] <= h200.Breakdown["sm"]+h200.Breakdown["compute"] {
+	if h200.Breakdown[componentBandwidth]+h200.Breakdown[componentVRAM] <= h200.Breakdown[componentSM]+h200.Breakdown[componentCompute] {
 		t.Errorf("expected memory-bound profile to weight bandwidth+vram > sm+compute, got %v", h200.Breakdown)
 	}
 }
@@ -160,8 +160,8 @@ func TestScoreNodes_MixedWorkload(t *testing.T) {
 	profile := profileWithBound(v1alpha1.WorkloadBoundMixed)
 
 	nodes := []corev1.Node{
-		gpuNode("t4-node", "NVIDIA-T4", 1),
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1),
+		gpuNode("t4-node", productT4, 1),
+		gpuNode("a100-node", productA100, 1),
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), profile, nodes)
@@ -174,7 +174,7 @@ func TestScoreNodes_MixedWorkload(t *testing.T) {
 
 	// All breakdown components should have equal weights (25 each).
 	a100 := got[0]
-	for _, key := range []string{"sm", "bandwidth", "vram", "compute"} {
+	for _, key := range []string{componentSM, componentBandwidth, componentVRAM, componentCompute} {
 		if a100.Breakdown[key] == 0 {
 			t.Errorf("expected non-zero breakdown for %q, got 0", key)
 		}
@@ -186,8 +186,8 @@ func TestScoreNodes_UnknownBoundType(t *testing.T) {
 	profile := profileWithBound(v1alpha1.WorkloadBoundUnknown)
 
 	nodes := []corev1.Node{
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1),
-		gpuNode("t4-node", "NVIDIA-T4", 1),
+		gpuNode("a100-node", productA100, 1),
+		gpuNode("t4-node", productT4, 1),
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), profile, nodes)
@@ -207,8 +207,8 @@ func TestScoreNodes_NilProfile(t *testing.T) {
 	scorer := NewWeightedScorer(logr.Discard())
 
 	nodes := []corev1.Node{
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1),
-		gpuNode("t4-node", "NVIDIA-T4", 1),
+		gpuNode("a100-node", productA100, 1),
+		gpuNode("t4-node", productT4, 1),
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), nil, nodes)
@@ -231,9 +231,9 @@ func TestScoreNodes_FiltersIneligibleNodes(t *testing.T) {
 		// CPU-only node: no GPUs, no product label.
 		{ObjectMeta: metav1.ObjectMeta{Name: "cpu-node"}},
 		// GPU node with product label but zero allocatable GPUs.
-		gpuNode("label-only-node", "NVIDIA-A100-SXM4-80GB", 0),
+		gpuNode("label-only-node", productA100, 0),
 		// Valid GPU node.
-		gpuNode("real-gpu-node", "NVIDIA-T4", 2),
+		gpuNode("real-gpu-node", productT4, 2),
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), profile, nodes)
@@ -277,8 +277,8 @@ func TestScoreNodes_HeterogeneousCluster(t *testing.T) {
 	nodes := []corev1.Node{
 		gpuNode("p100-node", "NVIDIA-P100", 1),
 		gpuNode("v100-node", "NVIDIA-V100-SXM2", 1),
-		gpuNode("t4-node", "NVIDIA-T4", 1),
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1),
+		gpuNode("t4-node", productT4, 1),
+		gpuNode("a100-node", productA100, 1),
 		gpuNode("h100-node", "NVIDIA-H100-SXM", 1),
 		gpuNode("l40s-node", "NVIDIA-L40S", 1),
 		// CPU node — will be filtered out.
@@ -323,8 +323,8 @@ func TestScoreNodes_DeterministicTieBreaking(t *testing.T) {
 
 	// Two identical GPU nodes — same product, same GPUs.
 	nodes := []corev1.Node{
-		gpuNode("node-b", "NVIDIA-A100-SXM4-80GB", 1),
-		gpuNode("node-a", "NVIDIA-A100-SXM4-80GB", 1),
+		gpuNode("node-b", productA100, 1),
+		gpuNode("node-a", productA100, 1),
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), profile, nodes)
@@ -350,8 +350,8 @@ func TestScoreNodes_DoesNotMutateInputs(t *testing.T) {
 	profile := profileWithBound(v1alpha1.WorkloadBoundCompute)
 
 	original := []corev1.Node{
-		gpuNode("t4-node", "NVIDIA-T4", 1),
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1),
+		gpuNode("t4-node", productT4, 1),
+		gpuNode("a100-node", productA100, 1),
 	}
 
 	// Keep a copy of the original order.
@@ -379,7 +379,7 @@ func TestScoreNodes_BreakdownContainsAllComponents(t *testing.T) {
 	profile := profileWithBound(v1alpha1.WorkloadBoundCompute)
 
 	nodes := []corev1.Node{
-		gpuNode("a100-node", "NVIDIA-A100-SXM4-80GB", 1),
+		gpuNode("a100-node", productA100, 1),
 	}
 
 	got, err := scorer.ScoreNodes(context.Background(), profile, nodes)
@@ -391,7 +391,7 @@ func TestScoreNodes_BreakdownContainsAllComponents(t *testing.T) {
 		t.Fatalf("expected 1 node, got %d", len(got))
 	}
 
-	expectedKeys := []string{"sm", "bandwidth", "vram", "compute"}
+	expectedKeys := []string{componentSM, componentBandwidth, componentVRAM, componentCompute}
 	for _, key := range expectedKeys {
 		if _, ok := got[0].Breakdown[key]; !ok {
 			t.Errorf("missing breakdown key %q", key)
