@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gpuv1alpha1 "github.com/chirichexe/kratos/api/v1alpha1"
+	"github.com/chirichexe/kratos/internal/scoring"
 )
 
 const (
@@ -61,6 +62,7 @@ type CUDAExperimentReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
 	NsightComputeImage string
+	NodeScorer         scoring.NodeScorer
 }
 
 // +kubebuilder:rbac:groups=gpu.scheduler.io,resources=cudaexperiments,verbs=get;list;watch;create;update;patch;delete
@@ -70,6 +72,7 @@ type CUDAExperimentReconciler struct {
 // +kubebuilder:rbac:groups=gpu.scheduler.io,resources=workloadprofiles/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -148,7 +151,11 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 	var job batchv1.Job
 	err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: experiment.Namespace}, &job)
 	if apierrors.IsNotFound(err) {
-		job = r.executionJobForExperiment(experiment)
+		nodeSelector, err := r.nodeSelectorForExperiment(ctx, experiment)
+		if err != nil {
+			return err
+		}
+		job = r.executionJobForExperiment(experiment, nodeSelector)
 		if err := ctrl.SetControllerReference(experiment, &job, r.Scheme); err != nil {
 			return err
 		}
@@ -160,6 +167,50 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 		return nil
 	}
 	return err
+}
+
+// nodeSelectorForExperiment scores the cluster's nodes against the
+// experiment's WorkloadProfile and returns a NodeSelector pinning the
+// execution Job to the best-scoring node. It returns a nil selector
+// (meaning: let the scheduler decide) when profiling is disabled, no
+// scorer is configured, the profile has not been produced yet, or no
+// node could be scored (e.g. no GPU Operator labels present).
+func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
+	ctx context.Context,
+	experiment *gpuv1alpha1.CUDAExperiment,
+) (map[string]string, error) {
+	if !experiment.Spec.ProfilingEnabled || r.NodeScorer == nil {
+		return nil, nil
+	}
+
+	profile := &gpuv1alpha1.WorkloadProfile{}
+	err := r.Get(ctx, types.NamespacedName{Name: workloadProfileName(experiment), Namespace: experiment.Namespace}, profile)
+	if apierrors.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var nodes corev1.NodeList
+	if err := r.List(ctx, &nodes); err != nil {
+		return nil, err
+	}
+
+	scored, err := r.NodeScorer.ScoreNodes(ctx, profile, nodes.Items)
+	if err != nil {
+		return nil, err
+	}
+	if len(scored) == 0 {
+		return nil, nil
+	}
+
+	best := scored[0]
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Selected node for execution Job based on scoring",
+		"node", best.NodeName, "score", best.TotalScore, "breakdown", best.Breakdown)
+
+	return map[string]string{corev1.LabelHostname: best.NodeName}, nil
 }
 
 func (r *CUDAExperimentReconciler) ensureProfilingJob(
@@ -426,7 +477,7 @@ func (r *CUDAExperimentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1alpha1.CUDAExperiment) batchv1.Job {
+func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1alpha1.CUDAExperiment, nodeSelector map[string]string) batchv1.Job {
 	parallelism := max(experiment.Spec.Replicas, 1)
 	gpuCount := gpuCountForExperiment(experiment)
 	labels := labelsForExperiment(experiment)
@@ -448,6 +499,7 @@ func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1al
 				Spec: corev1.PodSpec{
 					RuntimeClassName: ptrTo(runtimeClassNameForExperiment(experiment)),
 					RestartPolicy:    corev1.RestartPolicyNever,
+					NodeSelector:     nodeSelector,
 					Containers:       []corev1.Container{executionContainerForExperiment(experiment, gpuCount)},
 				},
 			},
