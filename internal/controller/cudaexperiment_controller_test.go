@@ -19,12 +19,14 @@ package controller
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	gpuv1alpha1 "github.com/chirichexe/kratos/api/v1alpha1"
+	"github.com/chirichexe/kratos/internal/scoring"
 )
 
 const (
@@ -221,7 +224,47 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		expectCondition(ctx, experiment, failedConditionType, "ProfilingJobFailed")
 		expectOneCondition(ctx, experiment, failedConditionType)
 	})
+
+	It("pins the ExecutionJob to the best-scoring node when a NodeScorer is configured", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-node-scoring", true)
+		createWorkloadProfileWithBoundType(ctx, experiment, gpuv1alpha1.WorkloadBoundCompute)
+		createGPUNode(ctx, "test-gpu-node")
+		reconciler := cudaExperimentReconciler()
+		reconciler.NodeScorer = scoring.NewWeightedScorer(logr.Discard())
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, executionJobName(experiment), experiment.Name)
+		job := &batchv1.Job{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
+		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node"}))
+	})
 })
+
+func createGPUNode(ctx context.Context, name string) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				scoring.LabelGPUProduct:         "NVIDIA-A100-SXM4-80GB",
+				scoring.LabelGPUFamily:          "ampere",
+				scoring.LabelGPUComputeCapMajor: "8",
+				scoring.LabelGPUComputeCapMinor: "0",
+			},
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceName(scoring.ResourceNVIDIAGPU): *resource.NewQuantity(1, resource.DecimalSI),
+			},
+		},
+	}
+
+	Expect(k8sClient.Create(ctx, node)).To(Succeed())
+	DeferCleanup(func() {
+		err := k8sClient.Delete(ctx, node)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+}
 
 func cudaExperimentReconciler() *CUDAExperimentReconciler {
 	return &CUDAExperimentReconciler{
@@ -276,6 +319,34 @@ func createWorkloadProfile(ctx context.Context, experiment *gpuv1alpha1.CUDAExpe
 		err := k8sClient.Delete(ctx, profile)
 		Expect(client.IgnoreNotFound(err)).To(Succeed())
 	})
+}
+
+func createWorkloadProfileWithBoundType(
+	ctx context.Context,
+	experiment *gpuv1alpha1.CUDAExperiment,
+	boundType gpuv1alpha1.WorkloadBoundType,
+) {
+	profile := &gpuv1alpha1.WorkloadProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      workloadProfileName(experiment),
+			Namespace: experiment.Namespace,
+		},
+		Spec: gpuv1alpha1.WorkloadProfileSpec{
+			WorkloadImage:        experiment.Spec.Image,
+			Command:              experiment.Spec.Command,
+			Arguments:            experiment.Spec.Arguments,
+			SourceCUDAExperiment: experiment.Name,
+		},
+	}
+
+	Expect(k8sClient.Create(ctx, profile)).To(Succeed())
+	DeferCleanup(func() {
+		err := k8sClient.Delete(ctx, profile)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+
+	profile.Status.BoundType = boundType
+	Expect(k8sClient.Status().Update(ctx, profile)).To(Succeed())
 }
 
 func createProfilingJob(

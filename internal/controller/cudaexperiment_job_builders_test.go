@@ -36,7 +36,7 @@ func TestExecutionJobForExperimentBuildsNormalWorkloadJob(t *testing.T) {
 		NsightComputeImage: "custom/nsight:latest",
 	}
 
-	job := reconciler.executionJobForExperiment(experiment)
+	job := reconciler.executionJobForExperiment(experiment, nil)
 
 	if job.Name != "vector-add-execution" {
 		t.Fatalf("execution job name = %q, want %q", job.Name, "vector-add-execution")

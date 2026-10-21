@@ -37,6 +37,7 @@ import (
 
 	gpuv1alpha1 "github.com/chirichexe/kratos/api/v1alpha1"
 	"github.com/chirichexe/kratos/internal/controller"
+	"github.com/chirichexe/kratos/internal/scoring"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -182,6 +183,7 @@ func main() {
 		Client:             mgr.GetClient(),
 		Scheme:             mgr.GetScheme(),
 		NsightComputeImage: os.Getenv("KRATOS_NSIGHT_COMPUTE_IMAGE"),
+		NodeScorer:         scoring.NewWeightedScorer(ctrl.Log.WithName("scoring")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "cudaexperiment")
 		os.Exit(1)
