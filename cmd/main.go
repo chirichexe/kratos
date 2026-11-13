@@ -38,6 +38,7 @@ import (
 	gpuv1alpha1 "github.com/chirichexe/kratos/api/v1alpha1"
 	"github.com/chirichexe/kratos/internal/controller"
 	"github.com/chirichexe/kratos/internal/scoring"
+	webhookv1alpha1 "github.com/chirichexe/kratos/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -194,6 +195,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "workloadprofile")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := webhookv1alpha1.SetupCUDAExperimentWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "CUDAExperiment")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
