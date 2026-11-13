@@ -225,6 +225,54 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		expectOneCondition(ctx, experiment, failedConditionType)
 	})
 
+	It("pins the ExecutionJob to a constraint-satisfying node even without a WorkloadProfile", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-constraint-only", false)
+		experiment.Spec.MinimumComputeCapability = "7.0"
+		Expect(k8sClient.Update(ctx, experiment)).To(Succeed())
+		createGPUNode(ctx, "test-gpu-node-cc8")
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, executionJobName(experiment), experiment.Name)
+		job := &batchv1.Job{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
+		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node-cc8"}))
+	})
+
+	It("sets a Failed condition and creates no ExecutionJob when no node satisfies the configured constraints", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-no-eligible-node", false)
+		experiment.Spec.MinimumMemory = "9999Gi"
+		Expect(k8sClient.Update(ctx, experiment)).To(Succeed())
+		createGPUNode(ctx, "test-gpu-node-small")
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectCondition(ctx, experiment, failedConditionType, "NoEligibleNode")
+		expectOneCondition(ctx, experiment, failedConditionType)
+	})
+
+	It("reuses a WorkloadProfile from another CUDAExperiment with the same image and command", func() {
+		source := createCUDAExperiment(ctx, "test-resource-profile-source", true)
+		createWorkloadProfile(ctx, source)
+
+		reused := createCUDAExperiment(ctx, "test-resource-profile-reuse", true)
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, reused)
+
+		expectJobNotFound(ctx, profilingJobName(reused))
+		expectJobExists(ctx, executionJobName(reused), reused.Name)
+		expectWorkloadProfileNotFound(ctx, reused)
+		expectCondition(ctx, reused, executionJobConditionType, "JobCreated")
+
+		sourceProfile := &gpuv1alpha1.WorkloadProfile{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: workloadProfileName(source), Namespace: resourceNamespace}, sourceProfile)).To(Succeed())
+		Expect(sourceProfile.Spec.SourceCUDAExperiment).To(Equal(source.Name))
+	})
+
 	It("pins the ExecutionJob to the best-scoring node when a NodeScorer is configured", func() {
 		experiment := createCUDAExperiment(ctx, "test-resource-node-scoring", true)
 		createWorkloadProfileWithBoundType(ctx, experiment, gpuv1alpha1.WorkloadBoundCompute)
@@ -294,6 +342,17 @@ func createCUDAExperiment(ctx context.Context, name string, profilingEnabled boo
 	Expect(k8sClient.Create(ctx, experiment)).To(Succeed())
 	DeferCleanup(func() {
 		err := k8sClient.Delete(ctx, experiment)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+	// Reconciling may create this experiment's own WorkloadProfile without
+	// an owner-GC controller running in envtest to sweep it afterwards;
+	// delete it explicitly so it can't be cross-experiment-reused by a
+	// later, unrelated spec with the same image and command.
+	DeferCleanup(func() {
+		profile := &gpuv1alpha1.WorkloadProfile{
+			ObjectMeta: metav1.ObjectMeta{Name: workloadProfileName(experiment), Namespace: resourceNamespace},
+		}
+		err := k8sClient.Delete(ctx, profile)
 		Expect(client.IgnoreNotFound(err)).To(Succeed())
 	})
 
