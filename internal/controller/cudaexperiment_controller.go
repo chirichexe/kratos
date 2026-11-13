@@ -193,14 +193,14 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 
 // nodeSelectorForExperiment narrows the cluster's nodes to those satisfying
 // spec.minimumComputeCapability / spec.minimumMemory (when set), then scores
-// the remaining nodes against the experiment's WorkloadProfile and returns a
+// the remaining nodes against a reusable WorkloadProfile and returns a
 // NodeSelector pinning the execution Job to the best-scoring one.
 //
 // It returns a nil selector (meaning: let the scheduler decide) when there
 // are no constraints and either profiling is disabled, no scorer is
-// configured, the profile has not been produced yet, or no node could be
-// scored (e.g. no GPU Operator labels present). It returns errNoEligibleNode
-// when constraints are set but no node satisfies them.
+// configured, no profile is available yet, or no node could be scored (e.g.
+// no GPU Operator labels present). It returns errNoEligibleNode when
+// constraints are set but no node satisfies them.
 func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 	ctx context.Context,
 	experiment *gpuv1alpha1.CUDAExperiment,
