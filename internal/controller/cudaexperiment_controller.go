@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -52,6 +53,7 @@ const (
 	defaultWorkloadExecutable       = "/cuda-samples/vectorAdd"
 	sharedWorkloadVolumeName        = "workload"
 	sharedWorkloadMountPath         = "/shared"
+	workloadProfileLabel            = "gpu.scheduler.io/workload-profile"
 )
 
 var (
@@ -173,11 +175,11 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 	var job batchv1.Job
 	err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: experiment.Namespace}, &job)
 	if apierrors.IsNotFound(err) {
-		nodeSelector, err := r.nodeSelectorForExperiment(ctx, experiment)
+		nodeSelector, usedProfile, err := r.nodeSelectorForExperiment(ctx, experiment)
 		if err != nil {
 			return err
 		}
-		job = r.executionJobForExperiment(experiment, nodeSelector)
+		job = r.executionJobForExperiment(experiment, nodeSelector, usedProfile)
 		if err := ctrl.SetControllerReference(experiment, &job, r.Scheme); err != nil {
 			return err
 		}
@@ -194,7 +196,9 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 // nodeSelectorForExperiment narrows the cluster's nodes to those satisfying
 // spec.minimumComputeCapability / spec.minimumMemory (when set), then scores
 // the remaining nodes against a reusable WorkloadProfile and returns a
-// NodeSelector pinning the execution Job to the best-scoring one.
+// NodeSelector pinning the execution Job to the best-scoring one, plus the
+// name of the WorkloadProfile that informed the decision (empty when none
+// was used, e.g. constraint-only selection or no selector at all).
 //
 // It returns a nil selector (meaning: let the scheduler decide) when there
 // are no constraints and either profiling is disabled, no scorer is
@@ -204,25 +208,25 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 	ctx context.Context,
 	experiment *gpuv1alpha1.CUDAExperiment,
-) (map[string]string, error) {
+) (map[string]string, string, error) {
 	hasConstraints := experiment.Spec.MinimumComputeCapability != "" || experiment.Spec.MinimumMemory != ""
 	canScore := experiment.Spec.ProfilingEnabled && r.NodeScorer != nil
 
 	if !hasConstraints && !canScore {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	var nodes corev1.NodeList
 	if err := r.List(ctx, &nodes); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	eligible, err := scoring.FilterByConstraints(nodes.Items, experiment.Spec.MinimumComputeCapability, experiment.Spec.MinimumMemory)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if hasConstraints && len(eligible) == 0 {
-		return nil, errNoEligibleNode
+		return nil, "", errNoEligibleNode
 	}
 
 	log := ctrl.LoggerFrom(ctx)
@@ -230,29 +234,29 @@ func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 	if canScore {
 		profile, err := r.findWorkloadProfile(ctx, experiment)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if profile != nil {
 			scored, err := r.NodeScorer.ScoreNodes(ctx, profile, eligible)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			if len(scored) > 0 {
 				best := scored[0]
 				log.Info("Selected node for execution Job based on scoring",
 					"node", best.NodeName, "score", best.TotalScore, "breakdown", best.Breakdown)
-				return map[string]string{corev1.LabelHostname: best.NodeName}, nil
+				return map[string]string{corev1.LabelHostname: best.NodeName}, profile.Name, nil
 			}
 		}
 	}
 
 	if !hasConstraints {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	node := firstNodeNameSorted(eligible)
 	log.Info("Selected node for execution Job based on constraints only (no profile to score against)", "node", node)
-	return map[string]string{corev1.LabelHostname: node}, nil
+	return map[string]string{corev1.LabelHostname: node}, "", nil
 }
 
 // firstNodeNameSorted returns the alphabetically first node name, for a
@@ -557,10 +561,14 @@ func (r *CUDAExperimentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1alpha1.CUDAExperiment, nodeSelector map[string]string) batchv1.Job {
+func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1alpha1.CUDAExperiment, nodeSelector map[string]string, usedProfile string) batchv1.Job {
 	parallelism := max(experiment.Spec.Replicas, 1)
 	gpuCount := gpuCountForExperiment(experiment)
 	labels := labelsForExperiment(experiment)
+	if usedProfile != "" {
+		labels = maps.Clone(labels)
+		labels[workloadProfileLabel] = usedProfile
+	}
 
 	return batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

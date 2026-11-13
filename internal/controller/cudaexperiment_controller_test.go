@@ -238,6 +238,7 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		job := &batchv1.Job{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node-cc8"}))
+		Expect(job.Labels).NotTo(HaveKey(workloadProfileLabel))
 	})
 
 	It("sets a Failed condition and creates no ExecutionJob when no node satisfies the configured constraints", func() {
@@ -286,6 +287,7 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		job := &batchv1.Job{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node"}))
+		Expect(job.Labels).To(HaveKeyWithValue(workloadProfileLabel, workloadProfileName(experiment)))
 	})
 })
 
