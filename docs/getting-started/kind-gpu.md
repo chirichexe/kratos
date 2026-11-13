@@ -41,7 +41,7 @@ Create the cluster using `nvkind`. By default, `nvkind` spins up a control-plane
 nvkind cluster create --name kratos-gpu
 ```
 
-Alternatively, you can inspect or customize node declarations via [cluster/nvkind-cluster.yaml](../../cluster/nvkind-cluster.yaml).
+Alternatively, you can inspect or customize node declarations via [cluster/nvkind-cluster.yaml](https://github.com/chirichexe/kratos/blob/main/cluster/nvkind-cluster.yaml).
 
 Wait for all nodes to become ready:
 
