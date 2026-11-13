@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -55,6 +56,7 @@ const (
 var (
 	errInvalidProfileSummary = errors.New("invalid profile summary")
 	errProfileSummaryMissing = errors.New("profile summary missing")
+	errNoEligibleNode        = errors.New("no node satisfies the CUDAExperiment's minimum constraints")
 )
 
 // CUDAExperimentReconciler reconciles a CUDAExperiment object
@@ -90,7 +92,7 @@ func (r *CUDAExperimentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	if !experiment.Spec.ProfilingEnabled {
 		if err := r.ensureExecutionJob(ctx, &experiment); err != nil {
-			return ctrl.Result{}, err
+			return r.handleEnsureExecutionJobErr(ctx, &experiment, err)
 		}
 		return ctrl.Result{}, r.setExecutionJobCreatedCondition(ctx, &experiment)
 	}
@@ -141,9 +143,24 @@ func (r *CUDAExperimentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if err := r.ensureExecutionJob(ctx, &experiment); err != nil {
-		return ctrl.Result{}, err
+		return r.handleEnsureExecutionJobErr(ctx, &experiment, err)
 	}
 	return ctrl.Result{}, r.setExecutionJobCreatedCondition(ctx, &experiment)
+}
+
+// handleEnsureExecutionJobErr translates an ensureExecutionJob error into a
+// reconcile result, setting a Failed condition when no node satisfies the
+// experiment's constraints instead of requeuing forever on the same error.
+func (r *CUDAExperimentReconciler) handleEnsureExecutionJobErr(
+	ctx context.Context,
+	experiment *gpuv1alpha1.CUDAExperiment,
+	err error,
+) (ctrl.Result, error) {
+	if errors.Is(err, errNoEligibleNode) {
+		return ctrl.Result{}, r.setFailedCondition(ctx, experiment, "NoEligibleNode",
+			"No cluster node satisfies spec.minimumComputeCapability / spec.minimumMemory")
+	}
+	return ctrl.Result{}, err
 }
 
 func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, experiment *gpuv1alpha1.CUDAExperiment) error {
@@ -169,27 +186,25 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 	return err
 }
 
-// nodeSelectorForExperiment scores the cluster's nodes against the
-// experiment's WorkloadProfile and returns a NodeSelector pinning the
-// execution Job to the best-scoring node. It returns a nil selector
-// (meaning: let the scheduler decide) when profiling is disabled, no
-// scorer is configured, the profile has not been produced yet, or no
-// node could be scored (e.g. no GPU Operator labels present).
+// nodeSelectorForExperiment narrows the cluster's nodes to those satisfying
+// spec.minimumComputeCapability / spec.minimumMemory (when set), then scores
+// the remaining nodes against the experiment's WorkloadProfile and returns a
+// NodeSelector pinning the execution Job to the best-scoring one.
+//
+// It returns a nil selector (meaning: let the scheduler decide) when there
+// are no constraints and either profiling is disabled, no scorer is
+// configured, the profile has not been produced yet, or no node could be
+// scored (e.g. no GPU Operator labels present). It returns errNoEligibleNode
+// when constraints are set but no node satisfies them.
 func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 	ctx context.Context,
 	experiment *gpuv1alpha1.CUDAExperiment,
 ) (map[string]string, error) {
-	if !experiment.Spec.ProfilingEnabled || r.NodeScorer == nil {
-		return nil, nil
-	}
+	hasConstraints := experiment.Spec.MinimumComputeCapability != "" || experiment.Spec.MinimumMemory != ""
+	canScore := experiment.Spec.ProfilingEnabled && r.NodeScorer != nil
 
-	profile := &gpuv1alpha1.WorkloadProfile{}
-	err := r.Get(ctx, types.NamespacedName{Name: workloadProfileName(experiment), Namespace: experiment.Namespace}, profile)
-	if apierrors.IsNotFound(err) {
+	if !hasConstraints && !canScore {
 		return nil, nil
-	}
-	if err != nil {
-		return nil, err
 	}
 
 	var nodes corev1.NodeList
@@ -197,20 +212,58 @@ func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 		return nil, err
 	}
 
-	scored, err := r.NodeScorer.ScoreNodes(ctx, profile, nodes.Items)
+	eligible, err := scoring.FilterByConstraints(nodes.Items, experiment.Spec.MinimumComputeCapability, experiment.Spec.MinimumMemory)
 	if err != nil {
 		return nil, err
 	}
-	if len(scored) == 0 {
+	if hasConstraints && len(eligible) == 0 {
+		return nil, errNoEligibleNode
+	}
+
+	log := ctrl.LoggerFrom(ctx)
+
+	if canScore {
+		profile := &gpuv1alpha1.WorkloadProfile{}
+		err := r.Get(ctx, types.NamespacedName{Name: workloadProfileName(experiment), Namespace: experiment.Namespace}, profile)
+		switch {
+		case apierrors.IsNotFound(err):
+			// No profile yet to score against: fall through to the
+			// constraint-only selection below.
+		case err != nil:
+			return nil, err
+		default:
+			scored, err := r.NodeScorer.ScoreNodes(ctx, profile, eligible)
+			if err != nil {
+				return nil, err
+			}
+			if len(scored) > 0 {
+				best := scored[0]
+				log.Info("Selected node for execution Job based on scoring",
+					"node", best.NodeName, "score", best.TotalScore, "breakdown", best.Breakdown)
+				return map[string]string{corev1.LabelHostname: best.NodeName}, nil
+			}
+		}
+	}
+
+	if !hasConstraints {
 		return nil, nil
 	}
 
-	best := scored[0]
-	log := ctrl.LoggerFrom(ctx)
-	log.Info("Selected node for execution Job based on scoring",
-		"node", best.NodeName, "score", best.TotalScore, "breakdown", best.Breakdown)
+	node := firstNodeNameSorted(eligible)
+	log.Info("Selected node for execution Job based on constraints only (no profile to score against)", "node", node)
+	return map[string]string{corev1.LabelHostname: node}, nil
+}
 
-	return map[string]string{corev1.LabelHostname: best.NodeName}, nil
+// firstNodeNameSorted returns the alphabetically first node name, for a
+// deterministic pick among constraint-eligible nodes when no WorkloadProfile
+// is available to score them.
+func firstNodeNameSorted(nodes []corev1.Node) string {
+	names := make([]string, len(nodes))
+	for i, n := range nodes {
+		names[i] = n.Name
+	}
+	slices.Sort(names)
+	return names[0]
 }
 
 func (r *CUDAExperimentReconciler) ensureProfilingJob(

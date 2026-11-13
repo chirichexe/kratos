@@ -239,6 +239,35 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node"}))
 	})
+
+	It("pins the ExecutionJob to a constraint-satisfying node even without a WorkloadProfile", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-constraint-only", false)
+		experiment.Spec.MinimumComputeCapability = "7.0"
+		Expect(k8sClient.Update(ctx, experiment)).To(Succeed())
+		createGPUNode(ctx, "test-gpu-node-cc8")
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, executionJobName(experiment), experiment.Name)
+		job := &batchv1.Job{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
+		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node-cc8"}))
+	})
+
+	It("sets a Failed condition and creates no ExecutionJob when no node satisfies the configured constraints", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-no-eligible-node", false)
+		experiment.Spec.MinimumMemory = "9999Gi"
+		Expect(k8sClient.Update(ctx, experiment)).To(Succeed())
+		createGPUNode(ctx, "test-gpu-node-small")
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobNotFound(ctx, executionJobName(experiment))
+		expectCondition(ctx, experiment, failedConditionType, "NoEligibleNode")
+		expectOneCondition(ctx, experiment, failedConditionType)
+	})
 })
 
 func createGPUNode(ctx context.Context, name string) {
