@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -97,11 +98,15 @@ func (r *CUDAExperimentReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, r.setExecutionJobCreatedCondition(ctx, &experiment)
 	}
 
-	profileExists, err := r.workloadProfileExists(ctx, &experiment)
+	reusableProfile, err := r.findWorkloadProfile(ctx, &experiment)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !profileExists {
+	if reusableProfile != nil && reusableProfile.Name != workloadProfileName(&experiment) {
+		ctrl.LoggerFrom(ctx).Info("Reusing WorkloadProfile from another CUDAExperiment, skipping profiling",
+			"profile", reusableProfile.Name, "sourceExperiment", reusableProfile.Spec.SourceCUDAExperiment)
+	}
+	if reusableProfile == nil {
 		profilingJob, created, err := r.ensureProfilingJob(ctx, &experiment)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -223,15 +228,11 @@ func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 	log := ctrl.LoggerFrom(ctx)
 
 	if canScore {
-		profile := &gpuv1alpha1.WorkloadProfile{}
-		err := r.Get(ctx, types.NamespacedName{Name: workloadProfileName(experiment), Namespace: experiment.Namespace}, profile)
-		switch {
-		case apierrors.IsNotFound(err):
-			// No profile yet to score against: fall through to the
-			// constraint-only selection below.
-		case err != nil:
+		profile, err := r.findWorkloadProfile(ctx, experiment)
+		if err != nil {
 			return nil, err
-		default:
+		}
+		if profile != nil {
 			scored, err := r.NodeScorer.ScoreNodes(ctx, profile, eligible)
 			if err != nil {
 				return nil, err
@@ -291,16 +292,42 @@ func (r *CUDAExperimentReconciler) ensureProfilingJob(
 	return job, false, nil
 }
 
-func (r *CUDAExperimentReconciler) workloadProfileExists(ctx context.Context, experiment *gpuv1alpha1.CUDAExperiment) (bool, error) {
-	var profile gpuv1alpha1.WorkloadProfile
-	err := r.Get(ctx, types.NamespacedName{Name: workloadProfileName(experiment), Namespace: experiment.Namespace}, &profile)
-	if apierrors.IsNotFound(err) {
-		return false, nil
+// findWorkloadProfile returns a WorkloadProfile that can be reused for this
+// experiment: its own <name>-profile if one exists, otherwise the
+// alphabetically first WorkloadProfile in the same namespace whose
+// Spec.WorkloadImage and Spec.Command match this experiment's, regardless of
+// which CUDAExperiment originally produced it. It returns (nil, nil) when no
+// reusable profile exists yet; the caller should then run profiling.
+func (r *CUDAExperimentReconciler) findWorkloadProfile(
+	ctx context.Context,
+	experiment *gpuv1alpha1.CUDAExperiment,
+) (*gpuv1alpha1.WorkloadProfile, error) {
+	own := &gpuv1alpha1.WorkloadProfile{}
+	err := r.Get(ctx, types.NamespacedName{Name: workloadProfileName(experiment), Namespace: experiment.Namespace}, own)
+	if err == nil {
+		return own, nil
 	}
-	if err != nil {
-		return false, err
+	if !apierrors.IsNotFound(err) {
+		return nil, err
 	}
-	return true, nil
+
+	var profiles gpuv1alpha1.WorkloadProfileList
+	if err := r.List(ctx, &profiles, client.InNamespace(experiment.Namespace)); err != nil {
+		return nil, err
+	}
+
+	var candidates []gpuv1alpha1.WorkloadProfile
+	for _, p := range profiles.Items {
+		if p.Spec.WorkloadImage == experiment.Spec.Image && slices.Equal(p.Spec.Command, experiment.Spec.Command) {
+			candidates = append(candidates, p)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	slices.SortFunc(candidates, func(a, b gpuv1alpha1.WorkloadProfile) int { return cmp.Compare(a.Name, b.Name) })
+	return &candidates[0], nil
 }
 
 func (r *CUDAExperimentReconciler) createOrUpdateWorkloadProfileFromSummary(
