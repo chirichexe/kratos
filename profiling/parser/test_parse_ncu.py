@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from parse_ncu import BOUND_COMPUTE, BOUND_MEMORY, BOUND_MIXED, BOUND_UNKNOWN, parse_file
+from parse_ncu import BOUND_COMPUTE, BOUND_MEMORY, BOUND_MIXED, BOUND_UNKNOWN, classify, parse_file
 
 
 TESTDATA = Path(__file__).resolve().parent / "testdata"
@@ -46,6 +46,30 @@ class ParseNcuTests(unittest.TestCase):
 
         self.assertEqual(summary["boundType"], BOUND_UNKNOWN)
         self.assertEqual(summary["metrics"], {})
+
+    def test_low_pressure_memory_dominant_falls_back_to_memory(self) -> None:
+        # Neither absolute threshold fires (sm=4.55, l2=47.14 are both
+        # under 70%), as measured for real on a power-capped GPU, but
+        # memory is ~10x busier than SM: a real bottleneck, just a mild
+        # one by this metric's normalization.
+        self.assertEqual(
+            classify({"smThroughput": "4.55", "l2Throughput": "47.14"}),
+            BOUND_MEMORY,
+        )
+
+    def test_low_pressure_compute_dominant_falls_back_to_compute(self) -> None:
+        self.assertEqual(
+            classify({"smThroughput": "45", "l2Throughput": "10"}),
+            BOUND_COMPUTE,
+        )
+
+    def test_low_pressure_balanced_stays_unknown(self) -> None:
+        # Neither threshold fires and neither resource dominates the
+        # other by DOMINANCE_RATIO: genuinely ambiguous, stays unknown.
+        self.assertEqual(
+            classify({"smThroughput": "30", "l2Throughput": "25"}),
+            BOUND_UNKNOWN,
+        )
 
     def test_incomplete_input_does_not_crash(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
