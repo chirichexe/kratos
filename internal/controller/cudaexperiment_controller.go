@@ -769,7 +769,12 @@ func profilingRunnerForExperiment(experiment *gpuv1alpha1.CUDAExperiment, gpuCou
 		},
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"SYS_ADMIN"},
+				// SYS_ADMIN alone is not enough on kernels that gate the
+				// NVIDIA driver's performance counters behind CAP_PERFMON
+				// (split off from SYS_ADMIN since Linux 5.8): without it,
+				// ncu fails with "a driver resource was unavailable" even
+				// though RmProfilingAdminOnly admits this process.
+				Add: []corev1.Capability{"SYS_ADMIN", "PERFMON"},
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
