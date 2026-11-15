@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,8 +39,9 @@ func SetupCUDAExperimentWebhookWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:webhook:path=/validate-gpu-scheduler-io-v1alpha1-cudaexperiment,mutating=false,failurePolicy=fail,sideEffects=None,groups=gpu.scheduler.io,resources=cudaexperiments,verbs=create;update,versions=v1alpha1,name=vcudaexperiment-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // CUDAExperimentValidator rejects spec.minimumComputeCapability /
-// spec.minimumMemory values the reconciler could not otherwise parse until
-// it actually tried to score nodes against them.
+// spec.minimumMemory / spec.maxLatency / spec.networkBandwidthRequirement
+// values the reconciler could not otherwise parse until it actually tried
+// to use them.
 type CUDAExperimentValidator struct{}
 
 func (v *CUDAExperimentValidator) ValidateCreate(_ context.Context, obj *gpuv1alpha1.CUDAExperiment) (admission.Warnings, error) {
@@ -63,6 +65,16 @@ func validateConstraints(experiment *gpuv1alpha1.CUDAExperiment) error {
 	if mem := experiment.Spec.MinimumMemory; mem != "" {
 		if _, err := resource.ParseQuantity(mem); err != nil {
 			return fmt.Errorf("spec.minimumMemory: %w", err)
+		}
+	}
+	if lat := experiment.Spec.MaxLatency; lat != "" {
+		if _, err := time.ParseDuration(lat); err != nil {
+			return fmt.Errorf("spec.maxLatency: %w", err)
+		}
+	}
+	if bw := experiment.Spec.NetworkBandwidthRequirement; bw != "" {
+		if _, err := resource.ParseQuantity(bw); err != nil {
+			return fmt.Errorf("spec.networkBandwidthRequirement: %w", err)
 		}
 	}
 	return nil
