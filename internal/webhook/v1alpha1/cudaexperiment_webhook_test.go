@@ -48,6 +48,25 @@ var _ = Describe("CUDAExperiment Webhook", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("admits valid maxLatency and networkBandwidthRequirement", func() {
+		obj.Spec.MaxLatency = "10ms"
+		obj.Spec.NetworkBandwidthRequirement = "10Gi"
+		_, err := validator.ValidateCreate(ctx, obj)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("rejects a malformed maxLatency", func() {
+		obj.Spec.MaxLatency = "fast"
+		_, err := validator.ValidateCreate(ctx, obj)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects a malformed networkBandwidthRequirement", func() {
+		obj.Spec.NetworkBandwidthRequirement = malformedMemory
+		_, err := validator.ValidateCreate(ctx, obj)
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("rejects a malformed minimumComputeCapability", func() {
 		obj.Spec.MinimumComputeCapability = "fast"
 		_, err := validator.ValidateCreate(ctx, obj)

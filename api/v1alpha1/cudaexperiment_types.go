@@ -57,13 +57,22 @@ type CUDAExperimentSpec struct {
 	// +optional
 	RuntimeClassName string `json:"runtimeClassName,omitempty"`
 
-	MinimumComputeCapability    string `json:"minimumComputeCapability,omitempty"`
-	MinimumMemory               string `json:"minimumMemory,omitempty"`
-	Priority                    string `json:"priority,omitempty"`
-	ProfilingEnabled            bool   `json:"profilingEnabled,omitempty"`
-	Distributed                 bool   `json:"distributed,omitempty"`
-	NumberOfGPUs                int32  `json:"numberOfGPUs,omitempty"`
-	NumberOfNodes               int32  `json:"numberOfNodes,omitempty"`
+	MinimumComputeCapability string `json:"minimumComputeCapability,omitempty"`
+	MinimumMemory            string `json:"minimumMemory,omitempty"`
+	Priority                 string `json:"priority,omitempty"`
+	ProfilingEnabled         bool   `json:"profilingEnabled,omitempty"`
+	Distributed              bool   `json:"distributed,omitempty"`
+
+	// numberOfGPUs overrides gpuRequired for the GPU limit when set.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	NumberOfGPUs int32 `json:"numberOfGPUs,omitempty"`
+
+	// numberOfNodes is the number of nodes a distributed experiment spans.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	NumberOfNodes int32 `json:"numberOfNodes,omitempty"`
+
 	MaxLatency                  string `json:"maxLatency,omitempty"`
 	NetworkBandwidthRequirement string `json:"networkBandwidthRequirement,omitempty"`
 }
