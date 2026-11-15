@@ -128,15 +128,15 @@ func TestParseComputeCapability(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		major, minor, err := parseComputeCapability(tt.in)
+		major, minor, err := ParseComputeCapability(tt.in)
 		if tt.wantErr {
 			if err == nil {
-				t.Errorf("parseComputeCapability(%q): expected error, got nil", tt.in)
+				t.Errorf("ParseComputeCapability(%q): expected error, got nil", tt.in)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("parseComputeCapability(%q): unexpected error: %v", tt.in, err)
+			t.Errorf("ParseComputeCapability(%q): unexpected error: %v", tt.in, err)
 			continue
 		}
 		assertEqual(t, "major", major, tt.wantMajor)

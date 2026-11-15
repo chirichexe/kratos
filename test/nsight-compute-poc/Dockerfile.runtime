@@ -9,7 +9,7 @@ COPY test/nsight-compute-poc/profile.sh /scripts/profile.sh
 COPY profiling/parser/parse_ncu.py /scripts/parse_ncu.py
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl python3 "${NSIGHT_COMPUTE_PACKAGE}" \
+    && apt-get install -y --no-install-recommends ca-certificates curl python3 libgl1 libglu1-mesa freeglut3 "${NSIGHT_COMPUTE_PACKAGE}" \
     && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
     && chmod +x /usr/local/bin/kubectl /scripts/profile.sh /scripts/parse_ncu.py \
     && rm -rf /var/lib/apt/lists/* \

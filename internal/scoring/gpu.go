@@ -207,11 +207,15 @@ func normalizeArch(raw string) string {
 
 // normalizeProduct converts a GPU product label into the key format used
 // by the knownGPUs lookup table: lower-cased, spaces replaced with dashes,
-// "nvidia-" prefix stripped.
+// vendor/brand prefix stripped. The GPU Operator's real product labels use
+// the "Tesla-" brand prefix for data-center cards (e.g. "Tesla-T4",
+// "Tesla-V100-SXM2-32GB"), not just "NVIDIA-", so both must be stripped for
+// the lookup table's bare keys ("t4", "v100-sxm2", ...) to match.
 func normalizeProduct(product string) string {
 	s := strings.ToLower(product)
 	s = strings.ReplaceAll(s, " ", "-")
 	s = strings.TrimPrefix(s, "nvidia-")
+	s = strings.TrimPrefix(s, "tesla-")
 	return s
 }
 

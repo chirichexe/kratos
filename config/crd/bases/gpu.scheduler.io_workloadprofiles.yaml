@@ -139,6 +139,27 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              executionCount:
+                description: |-
+                  executionCount is the number of completed execution Jobs that used
+                  this profile to select a node, across every CUDAExperiment that
+                  reused it.
+                format: int32
+                type: integer
+              lastExecutionOutcome:
+                description: |-
+                  lastExecutionOutcome is the result of the most recently finished
+                  execution Job that used this profile.
+                enum:
+                - Succeeded
+                - Failed
+                type: string
+              lastExecutionTime:
+                description: |-
+                  lastExecutionTime is when the most recently finished execution Job
+                  that used this profile completed or failed.
+                format: date-time
+                type: string
               metrics:
                 additionalProperties:
                   type: string

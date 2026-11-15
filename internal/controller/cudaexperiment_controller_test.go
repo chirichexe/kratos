@@ -238,6 +238,7 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		job := &batchv1.Job{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node-cc8"}))
+		Expect(job.Labels).NotTo(HaveKey(workloadProfileLabel))
 	})
 
 	It("sets a Failed condition and creates no ExecutionJob when no node satisfies the configured constraints", func() {
@@ -252,6 +253,24 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		expectJobNotFound(ctx, executionJobName(experiment))
 		expectCondition(ctx, experiment, failedConditionType, "NoEligibleNode")
 		expectOneCondition(ctx, experiment, failedConditionType)
+	})
+
+	It("skips a tainted, constraint-satisfying node in favor of a schedulable one", func() {
+		experiment := createCUDAExperiment(ctx, "test-resource-skip-tainted", false)
+		experiment.Spec.MinimumComputeCapability = "7.0"
+		Expect(k8sClient.Update(ctx, experiment)).To(Succeed())
+		// Alphabetically first, so firstNodeNameSorted would pick it if the
+		// taint were not honored.
+		createTaintedGPUNode(ctx, "test-gpu-node-a-tainted")
+		createGPUNode(ctx, "test-gpu-node-b-ready")
+		reconciler := cudaExperimentReconciler()
+
+		reconcileExperiment(ctx, reconciler, experiment)
+
+		expectJobExists(ctx, executionJobName(experiment), experiment.Name)
+		job := &batchv1.Job{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
+		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node-b-ready"}))
 	})
 
 	It("reuses a WorkloadProfile from another CUDAExperiment with the same image and command", func() {
@@ -286,6 +305,7 @@ var _ = Describe("CUDAExperiment Controller", func() {
 		job := &batchv1.Job{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: executionJobName(experiment), Namespace: resourceNamespace}, job)).To(Succeed())
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{corev1.LabelHostname: "test-gpu-node"}))
+		Expect(job.Labels).To(HaveKeyWithValue(workloadProfileLabel, workloadProfileName(experiment)))
 	})
 })
 
@@ -303,6 +323,55 @@ func createGPUNode(ctx context.Context, name string) {
 		Status: corev1.NodeStatus{
 			Allocatable: corev1.ResourceList{
 				corev1.ResourceName(scoring.ResourceNVIDIAGPU): *resource.NewQuantity(1, resource.DecimalSI),
+			},
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+
+	Expect(k8sClient.Create(ctx, node)).To(Succeed())
+	DeferCleanup(func() {
+		err := k8sClient.Delete(ctx, node)
+		Expect(client.IgnoreNotFound(err)).To(Succeed())
+	})
+
+	// The API server taints every newly created node
+	// node.kubernetes.io/not-ready (NoSchedule) regardless of the Ready
+	// condition in the create body; in a real cluster the node-lifecycle
+	// controller clears it once the node reports Ready, but no such
+	// controller runs in envtest. Clear it here so this fixture matches a
+	// real, already-schedulable GPU node.
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name}, node)).To(Succeed())
+	node.Spec.Taints = nil
+	Expect(k8sClient.Update(ctx, node)).To(Succeed())
+}
+
+// createTaintedGPUNode is a GPU-capable, Ready node that nonetheless
+// cannot host a Pod with no tolerations configured, e.g. a kind/K8s
+// control-plane node still carrying its NoSchedule taint.
+func createTaintedGPUNode(ctx context.Context, name string) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				scoring.LabelGPUProduct:         "NVIDIA-A100-SXM4-80GB",
+				scoring.LabelGPUFamily:          "ampere",
+				scoring.LabelGPUComputeCapMajor: "8",
+				scoring.LabelGPUComputeCapMinor: "0",
+			},
+		},
+		Spec: corev1.NodeSpec{
+			Taints: []corev1.Taint{
+				{Key: "node-role.kubernetes.io/control-plane", Effect: corev1.TaintEffectNoSchedule},
+			},
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceName(scoring.ResourceNVIDIAGPU): *resource.NewQuantity(1, resource.DecimalSI),
+			},
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
 			},
 		},
 	}
