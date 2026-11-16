@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -35,6 +36,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	gpuv1alpha1 "github.com/chirichexe/kratos/api/v1alpha1"
 	"github.com/chirichexe/kratos/internal/scoring"
@@ -52,12 +55,14 @@ const (
 	defaultWorkloadExecutable       = "/cuda-samples/vectorAdd"
 	sharedWorkloadVolumeName        = "workload"
 	sharedWorkloadMountPath         = "/shared"
+	workloadProfileLabel            = "gpu.scheduler.io/workload-profile"
 )
 
 var (
-	errInvalidProfileSummary = errors.New("invalid profile summary")
-	errProfileSummaryMissing = errors.New("profile summary missing")
-	errNoEligibleNode        = errors.New("no node satisfies the CUDAExperiment's minimum constraints")
+	errInvalidProfileSummary     = errors.New("invalid profile summary")
+	errProfileSummaryMissing     = errors.New("profile summary missing")
+	errNoEligibleNode            = errors.New("no node satisfies the CUDAExperiment's minimum constraints")
+	errExecutionJobUnschedulable = errors.New("execution Job has a Pod that cannot be scheduled onto any node")
 )
 
 // CUDAExperimentReconciler reconciles a CUDAExperiment object
@@ -76,6 +81,7 @@ type CUDAExperimentReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -165,6 +171,10 @@ func (r *CUDAExperimentReconciler) handleEnsureExecutionJobErr(
 		return ctrl.Result{}, r.setFailedCondition(ctx, experiment, "NoEligibleNode",
 			"No cluster node satisfies spec.minimumComputeCapability / spec.minimumMemory")
 	}
+	if errors.Is(err, errExecutionJobUnschedulable) {
+		return ctrl.Result{}, r.setFailedCondition(ctx, experiment, "ExecutionJobUnschedulable",
+			fmt.Sprintf("Execution Job %q has a Pod the scheduler cannot place on any node", executionJobName(experiment)))
+	}
 	return ctrl.Result{}, err
 }
 
@@ -173,11 +183,11 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 	var job batchv1.Job
 	err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: experiment.Namespace}, &job)
 	if apierrors.IsNotFound(err) {
-		nodeSelector, err := r.nodeSelectorForExperiment(ctx, experiment)
+		nodeSelector, usedProfile, err := r.nodeSelectorForExperiment(ctx, experiment)
 		if err != nil {
 			return err
 		}
-		job = r.executionJobForExperiment(experiment, nodeSelector)
+		job = r.executionJobForExperiment(experiment, nodeSelector, usedProfile)
 		if err := ctrl.SetControllerReference(experiment, &job, r.Scheme); err != nil {
 			return err
 		}
@@ -188,13 +198,46 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 		log.Info("Created Job", "name", job.Name, "namespace", job.Namespace)
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return r.checkExecutionJobSchedulable(ctx, &job)
+}
+
+// checkExecutionJobSchedulable reports errExecutionJobUnschedulable when any
+// Pod of the execution Job has been rejected by the scheduler. The Job's own
+// status never reflects this: a Pod that cannot be placed just stays
+// Pending, and with BackoffLimit 0 the Job neither completes nor fails on
+// its own, so without this check the experiment would report
+// ExecutionJobCreated forever while doing nothing.
+func (r *CUDAExperimentReconciler) checkExecutionJobSchedulable(ctx context.Context, job *batchv1.Job) error {
+	var pods corev1.PodList
+	if err := r.List(ctx, &pods, client.InNamespace(job.Namespace), client.MatchingLabels{"job-name": job.Name}); err != nil {
+		return err
+	}
+	if slices.ContainsFunc(pods.Items, podIsUnschedulable) {
+		return errExecutionJobUnschedulable
+	}
+	return nil
+}
+
+// podIsUnschedulable reports whether the scheduler has rejected the Pod,
+// per its PodScheduled condition.
+func podIsUnschedulable(pod corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodScheduled {
+			return condition.Status == corev1.ConditionFalse
+		}
+	}
+	return false
 }
 
 // nodeSelectorForExperiment narrows the cluster's nodes to those satisfying
 // spec.minimumComputeCapability / spec.minimumMemory (when set), then scores
 // the remaining nodes against a reusable WorkloadProfile and returns a
-// NodeSelector pinning the execution Job to the best-scoring one.
+// NodeSelector pinning the execution Job to the best-scoring one, plus the
+// name of the WorkloadProfile that informed the decision (empty when none
+// was used, e.g. constraint-only selection or no selector at all).
 //
 // It returns a nil selector (meaning: let the scheduler decide) when there
 // are no constraints and either profiling is disabled, no scorer is
@@ -204,25 +247,33 @@ func (r *CUDAExperimentReconciler) ensureExecutionJob(ctx context.Context, exper
 func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 	ctx context.Context,
 	experiment *gpuv1alpha1.CUDAExperiment,
-) (map[string]string, error) {
+) (map[string]string, string, error) {
 	hasConstraints := experiment.Spec.MinimumComputeCapability != "" || experiment.Spec.MinimumMemory != ""
 	canScore := experiment.Spec.ProfilingEnabled && r.NodeScorer != nil
 
 	if !hasConstraints && !canScore {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	var nodes corev1.NodeList
 	if err := r.List(ctx, &nodes); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	eligible, err := scoring.FilterByConstraints(nodes.Items, experiment.Spec.MinimumComputeCapability, experiment.Spec.MinimumMemory)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	// A node can only ever run the execution Job if it actually has the GPU
+	// capacity allocatable and is schedulable (not cordoned, no untolerated
+	// taint such as the control-plane's NoSchedule); constraint labels alone
+	// say nothing about either. Filtering here, before scoring or the
+	// constraint-only fallback below, keeps both selection paths from
+	// pinning the Job to a node that can never run it.
+	eligible = scoring.FilterGPUNodes(eligible, int64(gpuCountForExperiment(experiment)))
+	eligible = filterSchedulableNodes(eligible)
 	if hasConstraints && len(eligible) == 0 {
-		return nil, errNoEligibleNode
+		return nil, "", errNoEligibleNode
 	}
 
 	log := ctrl.LoggerFrom(ctx)
@@ -230,29 +281,48 @@ func (r *CUDAExperimentReconciler) nodeSelectorForExperiment(
 	if canScore {
 		profile, err := r.findWorkloadProfile(ctx, experiment)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if profile != nil {
 			scored, err := r.NodeScorer.ScoreNodes(ctx, profile, eligible)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			if len(scored) > 0 {
 				best := scored[0]
 				log.Info("Selected node for execution Job based on scoring",
 					"node", best.NodeName, "score", best.TotalScore, "breakdown", best.Breakdown)
-				return map[string]string{corev1.LabelHostname: best.NodeName}, nil
+				return map[string]string{corev1.LabelHostname: best.NodeName}, profile.Name, nil
 			}
 		}
 	}
 
 	if !hasConstraints {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	node := firstNodeNameSorted(eligible)
 	log.Info("Selected node for execution Job based on constraints only (no profile to score against)", "node", node)
-	return map[string]string{corev1.LabelHostname: node}, nil
+	return map[string]string{corev1.LabelHostname: node}, "", nil
+}
+
+// filterSchedulableNodes returns the subset of nodes that can host a Pod
+// with no tolerations configured: not cordoned, and carrying no
+// NoSchedule/NoExecute taint (e.g. a kind/K8s control-plane node).
+func filterSchedulableNodes(nodes []corev1.Node) []corev1.Node {
+	result := make([]corev1.Node, 0, len(nodes))
+	for _, node := range nodes {
+		if node.Spec.Unschedulable {
+			continue
+		}
+		if slices.ContainsFunc(node.Spec.Taints, func(t corev1.Taint) bool {
+			return t.Effect == corev1.TaintEffectNoSchedule || t.Effect == corev1.TaintEffectNoExecute
+		}) {
+			continue
+		}
+		result = append(result, node)
+	}
+	return result
 }
 
 // firstNodeNameSorted returns the alphabetically first node name, for a
@@ -553,14 +623,33 @@ func (r *CUDAExperimentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&gpuv1alpha1.CUDAExperiment{}).
 		Owns(&batchv1.Job{}).
+		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(podToCUDAExperimentRequest)).
 		Named("cudaexperiment").
 		Complete(r)
 }
 
-func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1alpha1.CUDAExperiment, nodeSelector map[string]string) batchv1.Job {
+// podToCUDAExperimentRequest maps a profiling/execution Job's Pod back to
+// the CUDAExperiment that owns it, via the gpu.scheduler.io/experiment
+// label every such Pod carries (see labelsForExperiment), so a scheduling
+// failure on the Pod triggers a reconcile instead of going unnoticed.
+func podToCUDAExperimentRequest(_ context.Context, obj client.Object) []reconcile.Request {
+	experimentName, ok := obj.GetLabels()["gpu.scheduler.io/experiment"]
+	if !ok || experimentName == "" {
+		return nil
+	}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{Name: experimentName, Namespace: obj.GetNamespace()},
+	}}
+}
+
+func (r *CUDAExperimentReconciler) executionJobForExperiment(experiment *gpuv1alpha1.CUDAExperiment, nodeSelector map[string]string, usedProfile string) batchv1.Job {
 	parallelism := max(experiment.Spec.Replicas, 1)
 	gpuCount := gpuCountForExperiment(experiment)
 	labels := labelsForExperiment(experiment)
+	if usedProfile != "" {
+		labels = maps.Clone(labels)
+		labels[workloadProfileLabel] = usedProfile
+	}
 
 	return batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -680,7 +769,12 @@ func profilingRunnerForExperiment(experiment *gpuv1alpha1.CUDAExperiment, gpuCou
 		},
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"SYS_ADMIN"},
+				// SYS_ADMIN alone is not enough on kernels that gate the
+				// NVIDIA driver's performance counters behind CAP_PERFMON
+				// (split off from SYS_ADMIN since Linux 5.8): without it,
+				// ncu fails with "a driver resource was unavailable" even
+				// though RmProfilingAdminOnly admits this process.
+				Add: []corev1.Capability{"SYS_ADMIN", "PERFMON"},
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{

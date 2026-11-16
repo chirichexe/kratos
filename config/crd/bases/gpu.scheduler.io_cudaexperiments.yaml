@@ -71,10 +71,16 @@ spec:
               networkBandwidthRequirement:
                 type: string
               numberOfGPUs:
+                description: numberOfGPUs overrides gpuRequired for the GPU limit
+                  when set.
                 format: int32
+                minimum: 0
                 type: integer
               numberOfNodes:
+                description: numberOfNodes is the number of nodes a distributed experiment
+                  spans.
                 format: int32
+                minimum: 0
                 type: integer
               priority:
                 type: string

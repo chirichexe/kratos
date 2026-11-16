@@ -16,6 +16,10 @@ BOUND_MEMORY = "memory-bound"
 BOUND_MIXED = "mixed"
 BOUND_UNKNOWN = "unknown"
 
+# How much busier one resource must be than the other, relatively, to call
+# it the bottleneck when neither crossed its absolute pressure threshold.
+DOMINANCE_RATIO = 2.0
+
 METRIC_ALIASES = {
     "smThroughput": {
         "smthroughput",
@@ -239,6 +243,28 @@ def classify(metrics: dict[str, str]) -> str:
         return BOUND_MEMORY
     if compute_pressure:
         return BOUND_COMPUTE
+
+    # Neither absolute threshold fired. This genuinely happens on power-
+    # or thermal-capped GPUs (e.g. a 35W laptop part), where even a
+    # deliberately memory-bound kernel never reaches 70% of the
+    # sustained-elapsed theoretical peak the metric is normalized
+    # against. When one resource is clearly the dominant bottleneck
+    # relative to the other - not in absolute terms, but compared to
+    # each other - that dominance is still a real, useful signal; fall
+    # back to BOUND_UNKNOWN only when neither resource clearly dominates.
+    #
+    # This is reasoning inspired by the roofline model (compare compute
+    # pressure against memory pressure), not a literal implementation of
+    # it: a real roofline classifier compares arithmetic intensity
+    # (FLOP/byte) against a device-specific ridge point, which this
+    # function never computes. Comparing two already-peak-normalized
+    # percentages against each other sidesteps needing that ridge point
+    # explicitly, but it is an engineering proxy, not a derivation.
+    if sm is not None and memory_peak is not None and (sm > 0 or memory_peak > 0):
+        if sm > memory_peak * DOMINANCE_RATIO:
+            return BOUND_COMPUTE
+        if memory_peak > sm * DOMINANCE_RATIO:
+            return BOUND_MEMORY
     return BOUND_UNKNOWN
 
 

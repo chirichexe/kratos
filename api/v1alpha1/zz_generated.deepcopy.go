@@ -225,6 +225,10 @@ func (in *WorkloadProfileStatus) DeepCopyInto(out *WorkloadProfileStatus) {
 			(*out)[key] = val
 		}
 	}
+	if in.LastExecutionTime != nil {
+		in, out := &in.LastExecutionTime, &out.LastExecutionTime
+		*out = (*in).DeepCopy()
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

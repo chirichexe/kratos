@@ -19,7 +19,9 @@ package scoring
 import (
 	"cmp"
 	"context"
+	"math"
 	"slices"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -194,18 +196,81 @@ func sortScoredNodes(nodes []ScoredNode) {
 	})
 }
 
-// weightsForProfile returns the weight set corresponding to the profile's
-// bound type. If the profile is nil or its bound type is unrecognised,
-// the balanced default weights are used.
+// weightsForProfile returns the weight set for the profile. When the
+// profile carries parseable smThroughput/memory-throughput metrics, the
+// weights are interpolated continuously between the compute-bound and
+// memory-bound profiles by how strongly those metrics lean one way, so a
+// workload at 99% SM throughput is weighted differently from one at 71%
+// even though both carry the same discrete BoundType. Falls back to the
+// discrete bound-type bucket (and then to defaultWeights) when the
+// metrics are missing or unparsable.
 func weightsForProfile(profile *v1alpha1.WorkloadProfile) weights {
 	if profile == nil {
 		return defaultWeights
 	}
-	bt := profile.Status.BoundType
-	if w, ok := weightProfiles[bt]; ok {
+	if w, ok := weightsFromMetrics(profile.Status.Metrics); ok {
+		return w
+	}
+	if w, ok := weightProfiles[profile.Status.BoundType]; ok {
 		return w
 	}
 	return defaultWeights
+}
+
+// weightsFromMetrics interpolates between the compute-bound and
+// memory-bound weight profiles using the ratio of measured SM throughput
+// to the peak measured memory throughput (the same metrics
+// profiling/parser/parse_ncu.py's classify() uses). Returns ok=false when
+// there isn't enough signal to compute a meaningful ratio.
+func weightsFromMetrics(metrics map[string]string) (w weights, ok bool) {
+	sm, smOK := parseMetric(metrics, "smThroughput")
+	mem, memOK := maxMetric(metrics, "l2Throughput", "dramThroughput")
+	if !smOK || !memOK || sm+mem <= 0 {
+		return weights{}, false
+	}
+
+	computeRatio := sm / (sm + mem)
+	compute := weightProfiles[v1alpha1.WorkloadBoundCompute]
+	memory := weightProfiles[v1alpha1.WorkloadBoundMemory]
+	return weights{
+		sm:        interpolate(compute.sm, memory.sm, computeRatio),
+		bandwidth: interpolate(compute.bandwidth, memory.bandwidth, computeRatio),
+		vram:      interpolate(compute.vram, memory.vram, computeRatio),
+		compute:   interpolate(compute.compute, memory.compute, computeRatio),
+	}, true
+}
+
+// parseMetric reads and parses a single metric by name.
+func parseMetric(metrics map[string]string, key string) (float64, bool) {
+	raw, present := metrics[key]
+	if !present {
+		return 0, false
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
+}
+
+// maxMetric parses each candidate key present in metrics and returns the
+// largest value found.
+func maxMetric(metrics map[string]string, keys ...string) (float64, bool) {
+	var best float64
+	found := false
+	for _, key := range keys {
+		if value, ok := parseMetric(metrics, key); ok && (!found || value > best) {
+			best, found = value, true
+		}
+	}
+	return best, found
+}
+
+// interpolate linearly blends a (the compute-bound weight) and b (the
+// memory-bound weight) by ratio, where ratio=1 returns a and ratio=0
+// returns b.
+func interpolate(a, b int64, ratio float64) int64 {
+	return int64(math.Round(float64(a)*ratio + float64(b)*(1-ratio)))
 }
 
 // boundTypeOf safely extracts the BoundType string for logging.

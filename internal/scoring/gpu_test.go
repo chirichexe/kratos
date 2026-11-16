@@ -118,6 +118,20 @@ func TestExtractGPUSpec(t *testing.T) {
 			},
 		},
 		{
+			name: "Tesla-branded product label (real GPU Operator format) triggers fallback",
+			node: makeNode("gpu-node-tesla", map[string]string{
+				LabelGPUProduct: "Tesla-T4",
+			}, 1),
+			expect: func(t *testing.T, spec GPUSpec) {
+				t.Helper()
+				assertEqual(t, "ArchFamily", spec.ArchFamily, archTuring)
+				assertEqual(t, "SMCount", spec.SMCount, 40)
+				if spec.VRAMBytes == 0 {
+					t.Error("VRAMBytes should be filled from fallback for a Tesla-branded label")
+				}
+			},
+		},
+		{
 			name: "GPU count falls back to label when allocatable is zero",
 			node: makeNode("gpu-node-3", map[string]string{
 				LabelGPUProduct: productA100,
@@ -307,7 +321,7 @@ func TestNormalizeProduct(t *testing.T) {
 		{productA100, normA100},
 		{"NVIDIA A100 SXM4 80GB", normA100},
 		{productT4, "t4"},
-		{"Tesla-V100-SXM2", "tesla-v100-sxm2"},
+		{"Tesla-V100-SXM2", "v100-sxm2"},
 		{"", ""},
 	}
 

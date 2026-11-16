@@ -28,6 +28,12 @@ import (
 	"github.com/chirichexe/kratos/api/v1alpha1"
 )
 
+// Metric keys used by multiple weightsFromMetrics test cases.
+const (
+	metricSMThroughput = "smThroughput"
+	metricL2Throughput = "l2Throughput"
+)
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
@@ -55,6 +61,17 @@ func profileWithBound(bt v1alpha1.WorkloadBoundType) *v1alpha1.WorkloadProfile {
 	return &v1alpha1.WorkloadProfile{
 		Status: v1alpha1.WorkloadProfileStatus{
 			BoundType: bt,
+		},
+	}
+}
+
+// profileWithMetrics builds a WorkloadProfile carrying the given bound
+// type and raw profiling metrics (as parsed from a real summary.json).
+func profileWithMetrics(bt v1alpha1.WorkloadBoundType, metrics map[string]string) *v1alpha1.WorkloadProfile {
+	return &v1alpha1.WorkloadProfile{
+		Status: v1alpha1.WorkloadProfileStatus{
+			BoundType: bt,
+			Metrics:   metrics,
 		},
 	}
 }
@@ -462,6 +479,79 @@ func TestWeightsForProfile(t *testing.T) {
 			got := weightsForProfile(tt.profile)
 			if got.sm != tt.wantSM {
 				t.Errorf("sm weight = %d, want %d", got.sm, tt.wantSM)
+			}
+		})
+	}
+}
+
+// TestWeightsForProfile_ContinuousFromMetrics checks that, when real
+// profiling metrics are present, weights are interpolated by how strongly
+// they lean compute- or memory-wards instead of snapping to the discrete
+// bound-type bucket. The two extreme cases use the actual measured
+// metrics from this project's real compute_bound.cu / memory_bound.cu
+// CUDAExperiments.
+func TestWeightsForProfile_ContinuousFromMetrics(t *testing.T) {
+	compute := weightProfiles[v1alpha1.WorkloadBoundCompute]
+	memory := weightProfiles[v1alpha1.WorkloadBoundMemory]
+
+	tests := []struct {
+		name    string
+		profile *v1alpha1.WorkloadProfile
+		want    weights
+	}{
+		{
+			// Real measurement from compute-bound-custom (ratio 0.9997):
+			// close enough to saturate the compute-bound bucket exactly.
+			"strongly compute-bound matches the compute-bound bucket",
+			profileWithMetrics(v1alpha1.WorkloadBoundCompute, map[string]string{
+				metricSMThroughput: "99.89", metricL2Throughput: "0.03",
+			}),
+			compute,
+		},
+		{
+			// Real measurement from memory-bound-custom (ratio 0.088):
+			// clearly memory-leaning, but SM isn't driven all the way to
+			// zero, so the blend doesn't fully saturate the memory-bound
+			// bucket - it lands partway between the two, closer to memory.
+			"memory-leaning real measurement blends toward the memory-bound bucket",
+			profileWithMetrics(v1alpha1.WorkloadBoundMemory, map[string]string{
+				metricSMThroughput: "4.54", metricL2Throughput: "47.07",
+			}),
+			weights{sm: 13, bandwidth: 42, vram: 29, compute: 17},
+		},
+		{
+			"balanced metrics land halfway between the two buckets",
+			profileWithMetrics(v1alpha1.WorkloadBoundMixed, map[string]string{
+				metricSMThroughput: "50", metricL2Throughput: "50",
+			}),
+			weights{sm: 25, bandwidth: 28, vram: 23, compute: 25},
+		},
+		{
+			"dramThroughput is used when l2Throughput is absent",
+			profileWithMetrics(v1alpha1.WorkloadBoundMemory, map[string]string{
+				metricSMThroughput: "4.54", "dramThroughput": "47.07",
+			}),
+			weights{sm: 13, bandwidth: 42, vram: 29, compute: 17},
+		},
+		{
+			"missing metrics fall back to the discrete bucket",
+			profileWithBound(v1alpha1.WorkloadBoundCompute),
+			compute,
+		},
+		{
+			"unparsable metrics fall back to the discrete bucket",
+			profileWithMetrics(v1alpha1.WorkloadBoundMemory, map[string]string{
+				metricSMThroughput: "n/a", metricL2Throughput: "n/a",
+			}),
+			memory,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := weightsForProfile(tt.profile)
+			if got != tt.want {
+				t.Errorf("weightsForProfile() = %+v, want %+v", got, tt.want)
 			}
 		})
 	}

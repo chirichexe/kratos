@@ -37,7 +37,7 @@ func FilterByConstraints(nodes []corev1.Node, minComputeCapability, minMemory st
 	checkCompute := minComputeCapability != ""
 	var minCompute int
 	if checkCompute {
-		major, minor, err := parseComputeCapability(minComputeCapability)
+		major, minor, err := ParseComputeCapability(minComputeCapability)
 		if err != nil {
 			return nil, fmt.Errorf("minimumComputeCapability: %w", err)
 		}
@@ -75,10 +75,10 @@ func FilterByConstraints(nodes []corev1.Node, minComputeCapability, minMemory st
 	return result, nil
 }
 
-// parseComputeCapability parses a "major.minor" CUDA compute capability
+// ParseComputeCapability parses a "major.minor" CUDA compute capability
 // string (e.g. "7.0", "8.6") into its integer components. The minor
 // component defaults to 0 when omitted (e.g. "8").
-func parseComputeCapability(s string) (major, minor int, err error) {
+func ParseComputeCapability(s string) (major, minor int, err error) {
 	parts := strings.SplitN(s, ".", 2)
 	major, err = strconv.Atoi(parts[0])
 	if err != nil {
