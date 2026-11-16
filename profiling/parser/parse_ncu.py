@@ -252,6 +252,14 @@ def classify(metrics: dict[str, str]) -> str:
     # relative to the other - not in absolute terms, but compared to
     # each other - that dominance is still a real, useful signal; fall
     # back to BOUND_UNKNOWN only when neither resource clearly dominates.
+    #
+    # This is reasoning inspired by the roofline model (compare compute
+    # pressure against memory pressure), not a literal implementation of
+    # it: a real roofline classifier compares arithmetic intensity
+    # (FLOP/byte) against a device-specific ridge point, which this
+    # function never computes. Comparing two already-peak-normalized
+    # percentages against each other sidesteps needing that ridge point
+    # explicitly, but it is an engineering proxy, not a derivation.
     if sm is not None and memory_peak is not None and (sm > 0 or memory_peak > 0):
         if sm > memory_peak * DOMINANCE_RATIO:
             return BOUND_COMPUTE
